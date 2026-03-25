@@ -325,7 +325,7 @@ robotState = ROBOT_IDLE
 controller = Controller()
 
 left_motor = Motor(Ports.PORT1, GearSetting.RATIO_18_1, False)
-right_motor = Motor(Ports.PORT10, GearSetting.RATIO_18_1, True)
+right_motor = Motor(Ports.PORT2, GearSetting.RATIO_18_1, True)
 
 left_sensor = Line(brain.three_wire_port.b)
 right_sensor = Line(brain.three_wire_port.a)
@@ -338,17 +338,18 @@ def handleLineTimer():
         right_reflectivity = right_sensor.reflectivity()
         left_reflectivity = left_sensor.reflectivity()
 
-        print(left_reflectivity, right_reflectivity)
+        brain.screen.print(left_reflectivity, right_reflectivity)
 
         # TODO: Define the error
-        line_error = 0
+        line_error = right_reflectivity - left_reflectivity
 
         # TODO: Calculate the effort from the error
-        turning_effort = 0
+        turning_effort = Kp * line_error
         
         # TODO: Find the base speed to go 20 cm/sec
         # We'll add and subtract from the wheels to keep the average speed the same
-        base_speed = 0
+        speed = 20.0 # cm/s
+        base_speed = (speed / CIRCUMFERENCE) * 60 * GEAR_RATIO
         
         # TODO: Control the motor speeds as a combination of base_speed and turning effort
         # Depending on your definition of error, you will need +/- for each term
@@ -369,7 +370,7 @@ lineTimer.event(handleLineTimer, 50)
 ## Button handler. Note that we check the state and then act accordingly
 def handleLeft1Button_2():
     global robotState
-    print("Button L1")
+    brain.screen.print("Button L1")
     if(robotState == ROBOT_IDLE):
         robotState = ROBOT_LINING        
     elif(robotState == ROBOT_LINING):
