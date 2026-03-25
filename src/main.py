@@ -310,14 +310,91 @@ Note that the main loop only checks for the completed motion. The button press i
 the VEX event system.
 """
 
+# --------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------
+
+## A basic line following program that uses checker/handlers
+## See lecture notes for the state diagram
+
+ROBOT_IDLE = 0
+ROBOT_LINING = 1
+
+robotState = ROBOT_IDLE
+
+# Controller
+controller = Controller()
+
+left_motor = Motor(Ports.PORT1, GearSetting.RATIO_18_1, False)
+right_motor = Motor(Ports.PORT10, GearSetting.RATIO_18_1, True)
+
+left_sensor = Line(brain.three_wire_port.b)
+right_sensor = Line(brain.three_wire_port.a)
+
+Kp = 0 ## TODO: Pick a Kp to start; then adjust to get good performance
+
+## Line timer handler. Note that we check the state and act accordingly
+def handleLineTimer():
+    if(robotState == ROBOT_LINING):
+        right_reflectivity = right_sensor.reflectivity()
+        left_reflectivity = left_sensor.reflectivity()
+
+        print(left_reflectivity, right_reflectivity)
+
+        # TODO: Define the error
+        line_error = 0
+
+        # TODO: Calculate the effort from the error
+        turning_effort = 0
+        
+        # TODO: Find the base speed to go 20 cm/sec
+        # We'll add and subtract from the wheels to keep the average speed the same
+        base_speed = 0
+        
+        # TODO: Control the motor speeds as a combination of base_speed and turning effort
+        # Depending on your definition of error, you will need +/- for each term
+        left_motor.spin(FORWARD, base_speed + turning_effort, RPM)
+        right_motor.spin(FORWARD, base_speed - turning_effort, RPM)
+
+    ## Don't forget to restart the timer!
+    lineTimer.event(handleLineTimer, 50)
+
+## The line timer will tell us when to correct the heading
+lineTimer = Timer()
+
+## This uses the VEX event machinery, 'automatic' checker-handler
+## It has the same functionality as "if check timer expired -> handle timer expired"
+## Maybe adust the timer interval
+lineTimer.event(handleLineTimer, 50)
+
+## Button handler. Note that we check the state and then act accordingly
+def handleLeft1Button():
+    global robotState
+    print("Button L1")
+    if(robotState == ROBOT_IDLE):
+        robotState = ROBOT_LINING        
+    elif(robotState == ROBOT_LINING):
+        robotState = ROBOT_IDLE    
+        left_motor.stop()
+        right_motor.stop()    
+
+## Same as "if check button press -> handle button press"
+controller.buttonL1.pressed(handleLeft1Button)
+
+## Everything is event-driven through the event library...no code in the main loop!
+while True:
+    pass
+
+
+
+
 
 # The main loop
 while True:
-    if(checkMotionComplete()): handleMotionComplete()
-    controller_1.screen.print(motor_8.torque(TorqueUnits.NM))
-    controller_1.screen.clear_row(1)
-    controller_1.screen.set_cursor(1,1)
-    wait(0.2,SECONDS)
+    # if(checkMotionComplete()): handleMotionComplete()
+    # controller_1.screen.print(motor_8.torque(TorqueUnits.NM))
+    # controller_1.screen.clear_row(1)
+    # controller_1.screen.set_cursor(1,1)
+    # wait(0.2,SECONDS)
     
     #handleBumperG()
     #HandleReflectanceA()
