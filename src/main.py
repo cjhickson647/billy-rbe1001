@@ -367,7 +367,7 @@ lineTimer = Timer()
 lineTimer.event(handleLineTimer, 50)
 
 ## Button handler. Note that we check the state and then act accordingly
-def handleLeft1Button():
+def handleLeft1Button_2():
     global robotState
     print("Button L1")
     if(robotState == ROBOT_IDLE):
@@ -378,7 +378,7 @@ def handleLeft1Button():
         right_motor.stop()    
 
 ## Same as "if check button press -> handle button press"
-controller.buttonL1.pressed(handleLeft1Button)
+controller.buttonL1.pressed(handleLeft1Button_2)
 
 ## Everything is event-driven through the event library...no code in the main loop!
 while True:
@@ -404,4 +404,3 @@ while True:
 
 
 ## TODO: Add various checkers/handlers; print ultrasonic; etc. See handout.
-
