@@ -330,7 +330,7 @@ right_motor = Motor(Ports.PORT10, GearSetting.RATIO_18_1, True)
 left_sensor = Line(brain.three_wire_port.b)
 right_sensor = Line(brain.three_wire_port.a)
 
-Kp = 0 ## TODO: Pick a Kp to start; then adjust to get good performance
+Kp = 0.3 ## TODO: Pick a Kp to start; then adjust to get good performance
 
 ## Line timer handler. Note that we check the state and act accordingly
 def handleLineTimer():
@@ -384,12 +384,12 @@ controller.buttonL1.pressed(handleLeft1Button_2)
 while True:
     pass
 
-
-
-
+# --------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------
 
 # The main loop
 while True:
+    pass
     # if(checkMotionComplete()): handleMotionComplete()
     # controller_1.screen.print(motor_8.torque(TorqueUnits.NM))
     # controller_1.screen.clear_row(1)
@@ -405,6 +405,6 @@ while True:
     #wait(1,SECONDS)
     #UltrasonicSensorCD()
     
-
-
-## TODO: Add various checkers/handlers; print ultrasonic; etc. See handout.
+    # Lab 2 ------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    
