@@ -314,11 +314,12 @@ the VEX event system.
 # The main loop
 while True:
     if(checkMotionComplete()): handleMotionComplete()
-    controller_1.screen.print(motor_8.torque(TorqueUnits.NM))
-    controller_1.screen.clear_row(1)
-    controller_1.screen.set_cursor(1,1)
-    wait(0.2,SECONDS)
     
+    
+    #controller_1.screen.print(motor_8.torque(TorqueUnits.NM))
+    #controller_1.screen.clear_row(1)
+    #controller_1.screen.set_cursor(1,1)
+    #wait(0.2,SECONDS)
     #handleBumperG()
     #HandleReflectanceA()
     #wait(1,SECONDS)
