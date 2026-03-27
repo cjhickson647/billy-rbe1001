@@ -109,6 +109,8 @@ current_state = IDLE
 
 # Rangefinder
 ## TODO: Add an ultrasonic rangefinder (Rangefinder) with the Device Manager
+inertial_5.calibrate()
+wait(2, SECONDS)
 
 def drive_for(direction, turns, speed):
     # L = motor rotation turns / (5) * pi * 4.125
@@ -123,7 +125,7 @@ def drive_for(direction, turns, speed):
 """
 Pro-tip: print out state _transistions_.
 """
-GEAR_RATIO = 5/3
+GEAR_RATIO = 5
 WHEEL_DIAM = 10.4775 # cm
 CIRCUMFERENCE = math.pi * WHEEL_DIAM
 WHEEL_TRACK = 31.75
@@ -223,7 +225,7 @@ one for released). Whenever the button is pressed, the handleButton function wil
 _without you having to do anything else_.
 
 """
-controller_1.buttonL1.pressed(handleLeft1Button)
+
 controller_1.buttonR1.pressed(handleRight1Button)
 
 ## TODO: Add event callback for bumper
@@ -237,8 +239,9 @@ def pidDrive(distance):
     # set gain constants
     kP = 5
     kI = 0
-    kD = 100
-    
+    kD = 20
+    kP_steer = 0;
+
     # reset motors
     left_motor.set_position(0, DEGREES)
     right_motor.set_position(0, DEGREES)
@@ -248,6 +251,7 @@ def pidDrive(distance):
     desiredDistance = motor_rotations * 360
 
     # set initial values for each of the terms
+    currentHeading = inertial_5.rotation(DEGREES)
     error = 0
     integral = 0
     derivative = 0
@@ -259,10 +263,90 @@ def pidDrive(distance):
     # main PID loop
     while True:
         # get current distance
-        currentDistance = left_motor.position() + right_motor.position()
+        currentDistance = (left_motor.position() + right_motor.position()) / 2
 
         # calculate error and add accumulated error
-        error = distance - currentDistance
+        error = desiredDistance - currentDistance
+        if (error < 200 and error > -200):
+            integral += error
+        
+        # calculate derivative term and motor power
+        derivative = error - prevError;
+        motorPower = (kP * error) + (kI * integral) + (kD * derivative)
+
+        # calculate heading correction
+        currentAngle = inertial_5.rotation(DEGREES)
+        headingError = currentHeading - currentAngle
+        headingCorrect = headingError * kP_steer
+
+        # normalize motor power between 1 and -1
+        if (motorPower > 1):
+            motorPower = 1
+        if (motorPower < -1):
+            motorPower = -1
+
+        # add slew to prevent jerky, rapid acceleration
+        slewRate = 0.1
+        if (motorPower > prevMotorPower + slewRate):
+            motorPower = prevMotorPower + slewRate
+        if (motorPower < prevMotorPower - slewRate):
+            motorPower = prevMotorPower - slewRate
+
+        # add heading correction to motor power
+        left_raw = (11 * motorPower) + headingCorrect
+        right_raw = (11 * motorPower) - headingCorrect
+        
+        # if the resulting motor power is above the motor limit, scale it down
+        max_raw = max(abs(left_raw), abs(right_raw))
+        if max_raw > 11:
+            left_calc = (left_raw / max_raw) * 11
+            right_calc = (right_raw / max_raw) * 11
+        else:
+            left_calc = left_raw
+            right_calc = right_raw
+
+        # spin motors using the calulated motor power
+        left_motor.spin(FORWARD, left_calc, VOLT);
+        right_motor.spin(FORWARD, right_calc, VOLT);
+
+        # if the error is minimal, we have reached the target, exit
+        if (error > -10 and error < 10 and error - prevError > -10 and error - prevError < 10):
+            break;
+        
+        # update variables for next loop
+        prevMotorPower = motorPower
+        prevError = error
+        wait(20, MSEC)
+    
+    # stop motors
+    left_motor.stop()
+    right_motor.stop()
+
+def pidTurn(degrees):
+    
+    # set gain constants
+    kP = 0.05
+    kI = 0
+    kD = 0
+
+    # reset motors
+    left_motor.set_position(0, DEGREES)
+    right_motor.set_position(0, DEGREES)
+
+    # set initial values for each of the terms
+    error = 0
+    integral = 0
+    derivative = 0
+    prevError = 0
+
+    motorPower = 0
+    prevMotorPower = 0
+
+    while True:
+        # get current rotation position
+        currentRotation = inertial_5.rotation(DEGREES)
+         # calculate error and add accumulated error
+        error = degrees - currentRotation
         if (error < 200 and error > -200):
             integral += error
         
@@ -284,21 +368,21 @@ def pidDrive(distance):
             motorPower = prevMotorPower - slewRate
 
         # spin motors using the calulated motor power
-        left_motor.spin(FORWARD, 11 * motorPower, VOLT);
+        left_motor.spin(FORWARD, -11 * motorPower, VOLT);
         right_motor.spin(FORWARD, 11 * motorPower, VOLT);
 
         # if the error is minimal, we have reached the target, exit
-        if (error > -10 and error < 10 and error - prevError > -10 and error - prevError < 10):
+        if (error > -1 and error < 1 and error - prevError > -0.3 and error - prevError < 0.3):
             break;
         
         # update variables for next loop
         prevMotorPower = motorPower
         prevError = error
         wait(20, MSEC)
-    
-    # stop motors
-    left_motor.stop()
-    right_motor.stop()
+        
+
+controller_1.buttonL1.pressed(lambda: pidDrive(100))
+controller_1.buttonR1.pressed(lambda: pidTurn(90))
 
     
 
