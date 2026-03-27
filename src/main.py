@@ -332,11 +332,13 @@ right_sensor = Line(brain.three_wire_port.a)
 
 Kp = 0.3 ## TODO: Pick a Kp to start; then adjust to get good performance
 
-# finding reflectivity values
+# finding/testing reflectivity values
 #while True:
-right_reflectivity = right_sensor.reflectivity()
-left_reflectivity = left_sensor.reflectivity()
-brain.screen.print(left_reflectivity, right_reflectivity)
+for i in range(10):
+    right_reflectivity = right_sensor.reflectivity()
+    left_reflectivity = left_sensor.reflectivity()
+    brain.screen.print(left_reflectivity, " ---- ",right_reflectivity)
+    wait(2, SECONDS)
 
 ## Line timer handler. Note that we check the state and act accordingly
 def handleLineTimer():
