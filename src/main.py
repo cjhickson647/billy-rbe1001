@@ -3,6 +3,7 @@ from vex import *
 import urandom # type: ignore
 import math
 
+global derail_threshold, right_reflectivity, left_reflectivity
 # Brain should be defined by default
 brain=Brain()
 
@@ -334,11 +335,43 @@ Kp = 0.3 ## TODO: Pick a Kp to start; then adjust to get good performance
 
 # finding/testing reflectivity values
 #while True:
-for i in range(10):
-    right_reflectivity = right_sensor.reflectivity()
-    left_reflectivity = left_sensor.reflectivity()
-    brain.screen.print(left_reflectivity, " ---- ",right_reflectivity)
-    wait(2, SECONDS)
+# for i in range(10):
+#     right_reflectivity = right_sensor.reflectivity()
+#     left_reflectivity = left_sensor.reflectivity()
+#     brain.screen.print(left_reflectivity, " ---- ",right_reflectivity)
+#     wait(2, SECONDS)
+
+#Derail Function is below   
+derail_threshold = 50
+right_reflectivity = right_sensor.reflectivity()
+left_reflectivity = left_sensor.reflectivity()
+
+
+def turn_left_step():
+    right_motor.spin(REVERSE, 40, RPM)
+
+def turn_right_step():
+    left_motor.spin(REVERSE, 40, RPM)
+
+def derail_left():
+        if left_reflectivity < derail_threshold:
+            right_motor.spin(REVERSE, 67, PERCENT)
+        elif left_reflectivity > derail_threshold:
+            right_motor.stop()
+        else:
+            brain.screen.print("YO MOMMA")
+    
+
+def derail_right():
+    while right_reflectivity < derail_threshold:
+        turn_right_step()
+    
+def at_intersection():
+    if (right_reflectivity > derail_threshold) and (left_reflectivity > derail_threshold):
+        left_motor.spin(REVERSE, 20, PERCENT)
+        right_motor.spin(REVERSE, 20, PERCENT)
+ 
+
 
 ## Line timer handler. Note that we check the state and act accordingly
 def handleLineTimer():
@@ -389,10 +422,16 @@ def handleLeft1Button_2():
 ## Same as "if check button press -> handle button press"
 controller.buttonL1.pressed(handleLeft1Button_2)
 
+
 ## Everything is event-driven through the event library...no code in the main loop!
 while True:
-    pass
-
+    at_intersection()
+    right_reflectivity = right_sensor.reflectivity()
+    left_reflectivity = left_sensor.reflectivity()
+    brain.screen.print(left_reflectivity, " ---- ",right_reflectivity)
+    wait(20, MSEC)
+    brain.screen.clear_screen()
+    brain.screen.set_cursor(1,1)
 # --------------------------------------------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------------------------------------------
 
