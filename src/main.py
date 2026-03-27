@@ -334,9 +334,9 @@ Kp = 0.3 ## TODO: Pick a Kp to start; then adjust to get good performance
 
 # finding reflectivity values
 #while True:
-#right_reflectivity = right_sensor.reflectivity()
-#left_reflectivity = left_sensor.reflectivity()
-#brain.screen.print(left_reflectivity)
+right_reflectivity = right_sensor.reflectivity()
+left_reflectivity = left_sensor.reflectivity()
+brain.screen.print(left_reflectivity, right_reflectivity)
 
 ## Line timer handler. Note that we check the state and act accordingly
 def handleLineTimer():
