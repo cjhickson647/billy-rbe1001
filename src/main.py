@@ -332,6 +332,12 @@ right_sensor = Line(brain.three_wire_port.a)
 
 Kp = 0.3 ## TODO: Pick a Kp to start; then adjust to get good performance
 
+# finding reflectivity values
+#while True:
+#right_reflectivity = right_sensor.reflectivity()
+#left_reflectivity = left_sensor.reflectivity()
+#brain.screen.print(left_reflectivity)
+
 ## Line timer handler. Note that we check the state and act accordingly
 def handleLineTimer():
     if(robotState == ROBOT_LINING):
@@ -353,8 +359,8 @@ def handleLineTimer():
         
         # TODO: Control the motor speeds as a combination of base_speed and turning effort
         # Depending on your definition of error, you will need +/- for each term
-        left_motor.spin(FORWARD, base_speed + turning_effort, RPM)
-        right_motor.spin(FORWARD, base_speed - turning_effort, RPM)
+        left_motor.spin(REVERSE, base_speed + turning_effort, RPM)
+        right_motor.spin(REVERSE, base_speed - turning_effort, RPM)
 
     ## Don't forget to restart the timer!
     lineTimer.event(handleLineTimer, 50)
