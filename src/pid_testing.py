@@ -333,13 +333,13 @@ def pidTurn(degrees):
     # set gain constants
     kP = 1.7
     kI = 0
-    kD = 9.1
+    kD = 10
 
     # reset motors
     left_motor.set_position(0, DEGREES)
     right_motor.set_position(0, DEGREES)
-    left_motor.set_stopping(BRAKE)
-    right_motor.set_stopping(BRAKE)
+    left_motor.set_stopping(COAST)
+    right_motor.set_stopping(COAST)
 
     # set initial values for each of the terms
     error = 0
