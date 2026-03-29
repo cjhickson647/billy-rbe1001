@@ -129,7 +129,7 @@ WHEEL_DIAM = 10.4775 # cm
 CIRCUMFERENCE = math.pi * WHEEL_DIAM
 WHEEL_TRACK = 31.75
 target_turn_degrees = 90.0
-inertial_5.calibrate()
+# inertial_5.calibrate()
 
 # Targets
 target_dist = 104 # 1 meter in cm, 56 for dead reckoning
@@ -301,9 +301,9 @@ one for released). Whenever the button is pressed, the handleButton function wil
 _without you having to do anything else_.
 
 """
-controller_1.buttonL1.pressed(handleLeft1Button)
-controller_1.buttonR1.pressed(handleRight1Button)
-controller_1.buttonA.pressed(dead_Reckoning)
+# controller_1.buttonL1.pressed(handleLeft1Button)
+# controller_1.buttonR1.pressed(handleRight1Button)
+# controller_1.buttonA.pressed(dead_Reckoning)
 
 ## TODO: Add event callback for bumper
 """
@@ -321,12 +321,6 @@ ROBOT_IDLE = 0
 ROBOT_LINING = 1
 
 robotState = ROBOT_IDLE
-
-# Controller
-controller = Controller()
-
-left_motor = Motor(Ports.PORT1, GearSetting.RATIO_18_1, False)
-right_motor = Motor(Ports.PORT2, GearSetting.RATIO_18_1, True)
 
 left_sensor = Line(brain.three_wire_port.b)
 right_sensor = Line(brain.three_wire_port.a)
@@ -406,7 +400,7 @@ lineTimer = Timer()
 ## This uses the VEX event machinery, 'automatic' checker-handler
 ## It has the same functionality as "if check timer expired -> handle timer expired"
 ## Maybe adust the timer interval
-lineTimer.event(handleLineTimer, 50)
+# lineTimer.event(handleLineTimer, 50)
 
 ## Button handler. Note that we check the state and then act accordingly
 def handleLeft1Button_2():
@@ -420,15 +414,24 @@ def handleLeft1Button_2():
         right_motor.stop()    
 
 ## Same as "if check button press -> handle button press"
-controller.buttonL1.pressed(handleLeft1Button_2)
+def handleCalibration():
+    print("Calibrating")
+    inertial_5.calibrate()
+
+    while inertial_5.is_calibrating():
+        wait(50, MSEC)
+    print("Calibration Complete")
+
+controller_1.buttonL1.pressed(handleCalibration)
 
 
 ## Everything is event-driven through the event library...no code in the main loop!
 while True:
-    at_intersection()
-    right_reflectivity = right_sensor.reflectivity()
-    left_reflectivity = left_sensor.reflectivity()
-    brain.screen.print(left_reflectivity, " ---- ",right_reflectivity)
+    # at_intersection()
+    # right_reflectivity = right_sensor.reflectivity()
+    # left_reflectivity = left_sensor.reflectivity()
+    # brain.screen.print(left_reflectivity, " ---- ",right_reflectivity)
+    brain.screen.print(inertial_5.heading(DEGREES))
     wait(20, MSEC)
     brain.screen.clear_screen()
     brain.screen.set_cursor(1,1)

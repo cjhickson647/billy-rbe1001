@@ -59,10 +59,10 @@ def rc_auto_loop_function_controller_1():
         if remote_control_code_enabled:
             # check the buttonR1/buttonR2 status
             # to control motor_8
-            if controller_1.buttonR1.pressing():
+            if controller_1.buttonY.pressing():
                 motor_8.spin(FORWARD)
                 controller_1_right_shoulder_control_motors_stopped = False
-            elif controller_1.buttonR2.pressing():
+            elif controller_1.buttonX.pressing():
                 motor_8.spin(REVERSE)
                 controller_1_right_shoulder_control_motors_stopped = False
             elif not controller_1_right_shoulder_control_motors_stopped:
@@ -103,6 +103,8 @@ current_state = IDLE
 
 # Bumper
 ## TODO: Add a Bumper with the Device Manager
+left_motor.set_stopping(HOLD)
+right_motor.set_stopping(HOLD)
 
 # Reflectance
 ## TODO: Add a reflectance sensor (Linetracker) with the Device Manager
@@ -111,6 +113,7 @@ current_state = IDLE
 ## TODO: Add an ultrasonic rangefinder (Rangefinder) with the Device Manager
 inertial_5.calibrate()
 wait(2, SECONDS)
+inertial_5.set_rotation(0, DEGREES)
 
 def drive_for(direction, turns, speed):
     # L = motor rotation turns / (5) * pi * 4.125
@@ -130,8 +133,6 @@ WHEEL_DIAM = 10.4775 # cm
 CIRCUMFERENCE = math.pi * WHEEL_DIAM
 WHEEL_TRACK = 31.75
 target_turn_degrees = 90.0
-inertial_5.calibrate()
-
 # Targets
 target_dist = 104 # 1 meter in cm, 56 for dead reckoning
 target_speed_cms = 20.0 # cm/s
@@ -226,21 +227,21 @@ _without you having to do anything else_.
 
 """
 
-controller_1.buttonR1.pressed(handleRight1Button)
+#controller_1.buttonR1.pressed(handleRight1Button)
 
 ## TODO: Add event callback for bumper
 """
 Note that the main loop only checks for the completed motion. The button press is handled by 
 the VEX event system.
 """
-
+timer = Timer()
 def pidDrive(distance):
-    
+    timer.clear()
     # set gain constants
     kP = 5
-    kI = 0
-    kD = 20
-    kP_steer = 0;
+    kI = 0.00
+    kD = 31.425
+    kP_steer = 1.2157;
 
     # reset motors
     left_motor.set_position(0, DEGREES)
@@ -252,6 +253,8 @@ def pidDrive(distance):
 
     # set initial values for each of the terms
     currentHeading = inertial_5.rotation(DEGREES)
+    CM_PER_DEGREE = CIRCUMFERENCE / (360 * GEAR_RATIO)
+    error_cm = 0
     error = 0
     integral = 0
     derivative = 0
@@ -263,8 +266,10 @@ def pidDrive(distance):
     # main PID loop
     while True:
         # get current distance
+        print("{:.2f}, {:.2f}".format(timer.time(SECONDS), error_cm))
         currentDistance = (left_motor.position() + right_motor.position()) / 2
-
+        cdCM = ((left_motor.position(DEGREES) * CM_PER_DEGREE) + (right_motor.position(DEGREES) * CM_PER_DEGREE)) / 2
+        error_cm = distance - cdCM
         # calculate error and add accumulated error
         error = desiredDistance - currentDistance
         if (error < 200 and error > -200):
@@ -293,8 +298,8 @@ def pidDrive(distance):
             motorPower = prevMotorPower - slewRate
 
         # add heading correction to motor power
-        left_raw = (11 * motorPower) + headingCorrect
-        right_raw = (11 * motorPower) - headingCorrect
+        left_raw = (11 * motorPower) - headingCorrect
+        right_raw = (11 * motorPower) + headingCorrect
         
         # if the resulting motor power is above the motor limit, scale it down
         max_raw = max(abs(left_raw), abs(right_raw))
@@ -322,16 +327,19 @@ def pidDrive(distance):
     left_motor.stop()
     right_motor.stop()
 
+
 def pidTurn(degrees):
     
     # set gain constants
-    kP = 0.05
+    kP = 1.7
     kI = 0
-    kD = 0
+    kD = 9.1
 
     # reset motors
     left_motor.set_position(0, DEGREES)
     right_motor.set_position(0, DEGREES)
+    left_motor.set_stopping(BRAKE)
+    right_motor.set_stopping(BRAKE)
 
     # set initial values for each of the terms
     error = 0
@@ -344,8 +352,10 @@ def pidTurn(degrees):
 
     while True:
         # get current rotation position
+        brain.screen.print("3")
         currentRotation = inertial_5.rotation(DEGREES)
          # calculate error and add accumulated error
+        print("{:.2f}, {:.2f}".format(timer.time(SECONDS), error))
         error = degrees - currentRotation
         if (error < 200 and error > -200):
             integral += error
@@ -368,22 +378,41 @@ def pidTurn(degrees):
             motorPower = prevMotorPower - slewRate
 
         # spin motors using the calulated motor power
+        # calculatedPower = motorPower * 11
+        # if abs(error) > 1.0: # Only apply if we aren't in the deadband
+        #     if calculatedPower > 0 and calculatedPower < 1.4:
+        #         calculatedPower = 1.4 # The Voltage Floor
+
         left_motor.spin(FORWARD, -11 * motorPower, VOLT);
         right_motor.spin(FORWARD, 11 * motorPower, VOLT);
 
         # if the error is minimal, we have reached the target, exit
-        if (error > -1 and error < 1 and error - prevError > -0.3 and error - prevError < 0.3):
+        if (error > -1 and error < 1 and error - prevError > -0.5 and error - prevError < 0.5):
+            right_motor.set_stopping(HOLD)
+            left_motor.set_stopping(HOLD)
             break;
         
         # update variables for next loop
         prevMotorPower = motorPower
         prevError = error
+        controller_1.screen.clear_screen()
+        controller_1.screen.set_cursor(1,1)
+        controller_1.screen.print(inertial_5.rotation(DEGREES))
         wait(20, MSEC)
+
+    left_motor.stop()
+    right_motor.stop()
+    brain.screen.clear_screen()
         
 
-controller_1.buttonL1.pressed(lambda: pidDrive(100))
+controller_1.buttonL1.pressed(lambda: pidDrive(150))
 controller_1.buttonR1.pressed(lambda: pidTurn(90))
+controller_1.buttonR2.pressed(lambda: pidTurn(0))
 
+# while True:
+#     controller_1.screen.print(inertial_5.rotation(DEGREES))
+#     controller_1.screen.clear_screen()
+#     controller_1.screen.set_cursor(1,1)
     
 
 # --------------------------------------------------------------------------------------------------------------------------
