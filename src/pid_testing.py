@@ -241,7 +241,7 @@ def pidDrive(distance):
     kP = 5
     kI = 0.00
     kD = 31.425
-    kP_steer = 1.2157;
+    kP_steer = 1.7; #1.2157
 
     # reset motors
     left_motor.set_position(0, DEGREES)
@@ -408,6 +408,26 @@ def pidTurn(degrees):
 controller_1.buttonL1.pressed(lambda: pidDrive(150))
 controller_1.buttonR1.pressed(lambda: pidTurn(90))
 controller_1.buttonR2.pressed(lambda: pidTurn(0))
+
+timer1 = Timer()
+pidDrive(292)
+wait(20,MSEC)
+pidTurn(90)
+wait(20,MSEC)
+pidDrive(295)
+wait(20,MSEC)
+pidTurn(0)
+wait(20,MSEC)
+pidDrive(169.5)
+wait(20,MSEC)
+pidTurn(-90)
+wait(20,MSEC)
+pidDrive(283.7)
+wait(20,MSEC)
+pidTurn(0)
+wait(20,MSEC)
+pidDrive(-440)
+print(timer.time(SECONDS))
 
 # while True:
 #     controller_1.screen.print(inertial_5.rotation(DEGREES))
