@@ -98,6 +98,9 @@ from vex import *
 IDLE = 0
 DRIVING_FWD = 1
 DRIVING_BKWD = 2
+inertial_5.calibrate()
+wait(2, SECONDS)
+inertial_5.set_rotation(0, DEGREES)
 
 # start out in the idle state
 current_state = IDLE
@@ -129,7 +132,6 @@ WHEEL_DIAM = 10.4775 # cm
 CIRCUMFERENCE = math.pi * WHEEL_DIAM
 WHEEL_TRACK = 31.75
 target_turn_degrees = 90.0
-# inertial_5.calibrate()
 
 # Targets
 target_dist = 104 # 1 meter in cm, 56 for dead reckoning
@@ -302,8 +304,8 @@ _without you having to do anything else_.
 
 """
 # controller_1.buttonL1.pressed(handleLeft1Button)
-# controller_1.buttonR1.pressed(handleRight1Button)
-# controller_1.buttonA.pressed(dead_Reckoning)
+controller_1.buttonR1.pressed(handleRight1Button)
+controller_1.buttonA.pressed(dead_Reckoning)
 
 ## TODO: Add event callback for bumper
 """
@@ -321,6 +323,12 @@ ROBOT_IDLE = 0
 ROBOT_LINING = 1
 
 robotState = ROBOT_IDLE
+
+# Controller
+controller = Controller()
+
+left_motor = Motor(Ports.PORT1, GearSetting.RATIO_18_1, False)
+right_motor = Motor(Ports.PORT2, GearSetting.RATIO_18_1, True)
 
 left_sensor = Line(brain.three_wire_port.b)
 right_sensor = Line(brain.three_wire_port.a)
@@ -357,18 +365,33 @@ def derail_left():
     
 
 def derail_right():
-    while right_reflectivity < derail_threshold:
-        turn_right_step()
-    
+    if right_reflectivity < derail_threshold:
+            left_motor.spin(REVERSE, 67, PERCENT)
+    elif right_reflectivity > derail_threshold:
+        left_motor.stop()
+    else:
+        brain.screen.print("YO MOMMA")
+correction = 0
+timer = Timer()
 def at_intersection():
-    if (right_reflectivity > derail_threshold) and (left_reflectivity > derail_threshold):
-        left_motor.spin(REVERSE, 20, PERCENT)
-        right_motor.spin(REVERSE, 20, PERCENT)
+    global robotState
+    global correction
+    if inertial_5.rotation(DEGREES) < -85:
+        right_motor.stop()
+        print("cheese")
+        robotState = ROBOT_LINING
+        wait(500, MSEC)
+        inertial_5.set_rotation(0 + correction * 3, DEGREES)
+        correction += 1
+
  
+    
 
 
 ## Line timer handler. Note that we check the state and act accordingly
 def handleLineTimer():
+    global robotState
+    global correction
     if(robotState == ROBOT_LINING):
         right_reflectivity = right_sensor.reflectivity()
         left_reflectivity = left_sensor.reflectivity()
@@ -387,15 +410,27 @@ def handleLineTimer():
         base_speed = (speed / CIRCUMFERENCE) * 60 * GEAR_RATIO
         
         # TODO: Control the motor speeds as a combination of base_speed and turning effort
-        # Depending on your definition of error, you will need +/- for each term
-        left_motor.spin(REVERSE, base_speed + turning_effort, RPM)
-        right_motor.spin(REVERSE, base_speed - turning_effort, RPM)
+        # Depending on your definition of error, you will need +/- for each 
+        if (right_reflectivity > derail_threshold) and (left_reflectivity > derail_threshold):
+            robotState = ROBOT_IDLE
+            left_motor.stop()
+            right_motor.stop()
+            print("your mother")
+            if correction == 4:
+                print(timer.time(SECONDS))
+            else:
+                right_motor.spin(REVERSE, 50, PERCENT)
+                at_intersection()
+        else:
+            left_motor.spin(REVERSE, base_speed + turning_effort, RPM)
+            right_motor.spin(REVERSE, base_speed - turning_effort, RPM)
+    
 
     ## Don't forget to restart the timer!
-    lineTimer.event(handleLineTimer, 50)
+    # lineTimer.event(handleLineTimer, 50)
 
 ## The line timer will tell us when to correct the heading
-lineTimer = Timer()
+# lineTimer = Timer()
 
 ## This uses the VEX event machinery, 'automatic' checker-handler
 ## It has the same functionality as "if check timer expired -> handle timer expired"
@@ -407,34 +442,33 @@ def handleLeft1Button_2():
     global robotState
     brain.screen.print("Button L1")
     if(robotState == ROBOT_IDLE):
-        robotState = ROBOT_LINING        
+        robotState = ROBOT_LINING
+        timer.reset()        
     elif(robotState == ROBOT_LINING):
         robotState = ROBOT_IDLE    
         left_motor.stop()
         right_motor.stop()    
 
 ## Same as "if check button press -> handle button press"
-def handleCalibration():
-    print("Calibrating")
-    inertial_5.calibrate()
-
-    while inertial_5.is_calibrating():
-        wait(50, MSEC)
-    print("Calibration Complete")
-
-controller_1.buttonL1.pressed(handleCalibration)
+controller.buttonL1.pressed(handleLeft1Button_2)
 
 
 ## Everything is event-driven through the event library...no code in the main loop!
 while True:
-    # at_intersection()
+    at_intersection()
+    handleLineTimer()
+    # wait(600, MSEC)
+    controller_1.screen.print(inertial_5.rotation(DEGREES))
+    controller_1.screen.clear_screen()
+    controller_1.screen.set_cursor(1,1)
+    wait(50, MSEC)
+
     # right_reflectivity = right_sensor.reflectivity()
     # left_reflectivity = left_sensor.reflectivity()
-    # brain.screen.print(left_reflectivity, " ---- ",right_reflectivity)
-    brain.screen.print(inertial_5.heading(DEGREES))
-    wait(20, MSEC)
-    brain.screen.clear_screen()
-    brain.screen.set_cursor(1,1)
+    # brain.screen.print(left_rflectivity, " ---- ",right_reflectivity)
+    # wait(20, MSEC)
+    # brain.screen.clear_screen()
+    # brain.screen.set_cursor(1,1)
 # --------------------------------------------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------------------------------------------
 
