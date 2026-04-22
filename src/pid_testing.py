@@ -267,8 +267,8 @@ def pidDrive(distance):
         # get current distance
         print("{:.2f}, {:.2f}".format(timer.time(SECONDS), error_cm))
         currentDistance = (left_motor_1.position() + left_motor_2.position() + right_motor_1.position() + right_motor_2.position()) / 4
-        # cdCM = ((left_motor.position(DEGREES) * CM_PER_DEGREE) + (right_motor.position(DEGREES) * CM_PER_DEGREE)) / 2
-        # error_cm = distance - cdCM
+        cdCM = ((left_motor_1.position(DEGREES) * CM_PER_DEGREE) + (left_motor_2.position(DEGREES) * CM_PER_DEGREE) + (right_motor_1.position(DEGREES) * CM_PER_DEGREE) + (right_motor_2.position(DEGREES) * CM_PER_DEGREE)) / 4
+        error_cm = distance - cdCM
         # calculate error and add accumulated error
         error = desiredDistance - currentDistance
         if (error < 200 and error > -200):
