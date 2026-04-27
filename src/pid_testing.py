@@ -11,7 +11,7 @@ controller_1 = Controller(PRIMARY)
 # AI Vision Color Descriptions
 # AI Vision Code Descriptions
 ai_vision_16 = AiVision(Ports.PORT16)
-inertial_5 = Inertial(Ports.PORT5)
+inertial_5 = Inertial(Ports.PORT6)
 claw = Motor(Ports.PORT19, GearSetting.RATIO_18_1, True)
 left_motor_motor_a = Motor(Ports.PORT17, GearSetting.RATIO_18_1, False)
 left_motor_motor_b = Motor(Ports.PORT18, GearSetting.RATIO_18_1, False)
@@ -238,7 +238,7 @@ def pidDrive(distance):
     kP = 5
     kI = 0.00
     kD = 31.425
-    kP_steer = 1.74; #1.2157
+    kP_steer = 0.0; #1.2157
 
     # reset motors
     left_motor_1.set_position(0, DEGREES)
@@ -331,18 +331,23 @@ def pidDrive(distance):
     right_motor_2.stop()
 
 
-def pidTurn(degrees):
+# max_time_msec is how long the loop should wait before giving up
+def pidTurn(degrees, max_time_msec):
     
     # set gain constants
-    kP = 1.7
+    kP = 2.1
     kI = 0
-    kD = 10
+    kD = 12
 
     # reset motors
     left_motor_1.set_position(0, DEGREES)
     left_motor_2.set_position(0, DEGREES)
     right_motor_1.set_position(0, DEGREES)
     right_motor_2.set_position(0, DEGREES)
+
+    # timer start
+    start_time = brain.timer.time(MSEC)
+    stall_start_time = brain.timer.time(MSEC)
 
     # set initial values for each of the terms
     error = 0
@@ -355,11 +360,12 @@ def pidTurn(degrees):
 
     while True:
         # get current rotation position
-        brain.screen.print("3")
         currentRotation = inertial_5.rotation(DEGREES)
+        current_time = brain.timer.time(MSEC)
          # calculate error and add accumulated error
         print("{:.2f}, {:.2f}".format(timer.time(SECONDS), error))
         error = degrees - currentRotation
+
         if (error < 200 and error > -200):
             integral += error
         
@@ -380,21 +386,26 @@ def pidTurn(degrees):
         if (motorPower < prevMotorPower - slewRate):
             motorPower = prevMotorPower - slewRate
 
-        # spin motors using the calulated motor power
-        # calculatedPower = motorPower * 11
-        # if abs(error) > 1.0: # Only apply if we aren't in the deadband
-        #     if calculatedPower > 0 and calculatedPower < 1.4:
-        #         calculatedPower = 1.4 # The Voltage Floor
+        left_motor_1.spin(FORWARD, 11 * motorPower, VOLT);
+        left_motor_2.spin(FORWARD, 11 * motorPower, VOLT)
+        right_motor_1.spin(FORWARD, -11 * motorPower, VOLT);
+        right_motor_2.spin(FORWARD, -11 * motorPower, VOLT)
+        
+        # turning for too long, lost cause exit early
+        if (current_time - start_time > max_time_msec):
+            break
 
-        left_motor_1.spin(FORWARD, -11 * motorPower, VOLT);
-        left_motor_2.spin(FORWARD, -11 * motorPower, VOLT)
-        right_motor_1.spin(FORWARD, 11 * motorPower, VOLT);
-        right_motor_2.spin(FORWARD, 11 * motorPower, VOLT)
-
-        # if the error is minimal, we have reached the target, exit
+        # standard exit condition (if the error is minimal, we have reached the target, exit)
         if (error > -1 and error < 1 and error - prevError > -0.5 and error - prevError < 0.5):
             break;
         
+        # keep moving, it's not joever yet
+        if (abs(error - prevError) > 0.5): 
+            stall_start_time = current_time  
+        # stuck in oscillation
+        elif (current_time - stall_start_time > 250):
+            break
+
         # update variables for next loop
         prevMotorPower = motorPower
         prevError = error
@@ -410,9 +421,9 @@ def pidTurn(degrees):
     brain.screen.clear_screen()
         
 
-controller_1.buttonL1.pressed(lambda: pidDrive(150))
-controller_1.buttonR1.pressed(lambda: pidTurn(90))
-controller_1.buttonR2.pressed(lambda: pidTurn(0))
+controller_1.buttonL1.pressed(lambda: pidDrive(203.2))
+controller_1.buttonR1.pressed(lambda: pidTurn(90, 2500))
+controller_1.buttonR2.pressed(lambda: pidTurn(0, 2500))
 
 # pidDrive(292)
 # wait(20,MSEC)
