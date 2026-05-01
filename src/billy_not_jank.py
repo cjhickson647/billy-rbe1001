@@ -1,5 +1,4 @@
 #region VEXcode Generated Robot Configuration
-from curses.ascii import DLE
 
 from vex import *
 import urandom # type: ignore
@@ -295,9 +294,10 @@ def mission():
         if LAST_STATE != RAMP_DRIVE:
             drive_task = PIDDrive(100)
             LAST_STATE = RAMP_DRIVE
-        drive_task.update()
         if drive_task.completed:
             ROBOT_STATE = SEARCHING
+        else: 
+            drive_task.update()
     elif ROBOT_STATE == SEARCHING:
         pass
     elif ROBOT_STATE == APPROACHING:
