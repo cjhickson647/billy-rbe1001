@@ -1,4 +1,6 @@
 #region VEXcode Generated Robot Configuration
+from curses.ascii import DLE
+
 from vex import *
 import urandom # type: ignore
 import math
@@ -37,12 +39,6 @@ def initializeRandomSeed():
       
 # Set random seed 
 initializeRandomSeed()
-
-def play_vexcode_sound(sound_name):
-    # Helper to make playing sounds from the V5 in VEXcode easier and
-    # keeps the code cleaner by making it clear what is happening.
-    print("VEXPlaySound:" + sound_name)
-    wait(5, MSEC)
 
 # add a small delay to make sure we don't print in the middle of the REPL header
 wait(200, MSEC)
@@ -104,6 +100,7 @@ HARVEST_RESET = 6
 DOING_YA_MOM = 67
 
 ROBOT_STATE = IDLE
+LAST_STATE = -1
 
 left_motor_1.set_stopping(HOLD)
 left_motor_2.set_stopping(HOLD)
@@ -117,5 +114,203 @@ imu.set_rotation(0, DEGREES)
 GEAR_RATIO = 5/3
 WHEEL_DIAM = 10.4775
 CIRCUMFERENCE = math.pi * WHEEL_DIAM
-WHEEL_TRACK = 22.86
 
+timer = Timer()
+class PIDDrive:
+    def __init__(self, distance):
+        timer.clear()
+        # set gain constants
+        self.kP, self.kI, self.kD = 5, 0.00, 31.425
+        self.kP_steer = 0.0
+        self.slewRate = 0.1
+        
+        # reset motors
+        left_motor_1.set_position(0, DEGREES)
+        left_motor_2.set_position(0, DEGREES)
+        right_motor_1.set_position(0, DEGREES)
+        right_motor_2.set_position(0, DEGREES)
+
+        # convert distance in cm to degrees to be rotated
+        motor_rotations = (distance / CIRCUMFERENCE) * GEAR_RATIO
+        self.desiredDistance = motor_rotations * 360
+        
+        # set initial values for each of the terms
+        self.currentHeading = imu.rotation(DEGREES)
+        self.error = 0
+        self.integral = 0
+        self.derivative = 0
+        self.prevError = 0
+        self.motorPower = 0
+        self.prevMotorPower = 0
+        self.completed = False
+
+    def update(self):
+        # calc logic
+        if self.completed:
+            return
+
+        currentDistance = (left_motor_1.position() + left_motor_2.position() + 
+                           right_motor_1.position() + right_motor_2.position()) / 4
+        
+        self.error = self.desiredDistance - currentDistance
+        
+        if -200 < self.error < 200:
+            self.integral += self.error
+            
+        self.derivative = self.error - self.prevError
+        self.motorPower = (self.kP * self.error) + (self.kI * self.integral) + (self.kD * self.derivative)
+
+        # Heading and Slew logic
+        currentAngle = imu.rotation(DEGREES)
+        headingCorrect = (self.currentHeading - currentAngle) * self.kP_steer
+        
+        # Normalize and Slew
+        self.motorPower = max(-1, min(1, self.motorPower))
+        if self.motorPower > self.prevMotorPower + self.slewRate:
+            self.motorPower = self.prevMotorPower + self.slewRate
+        elif self.motorPower < self.prevMotorPower - self.slewRate:
+            self.motorPower = self.prevMotorPower - self.slewRate
+
+        # Voltage scaling and Motor spin
+        left_raw = (11 * self.motorPower) - headingCorrect
+        right_raw = (11 * self.motorPower) + headingCorrect
+        max_raw = max(abs(left_raw), abs(right_raw))
+        
+        v_left = (left_raw / max_raw * 11) if max_raw > 11 else left_raw
+        v_right = (right_raw / max_raw * 11) if max_raw > 11 else right_raw
+
+        left_motor_1.spin(FORWARD, v_left, VOLT)
+        left_motor_2.spin(FORWARD, v_left, VOLT)
+        right_motor_1.spin(FORWARD, v_right, VOLT)
+        right_motor_2.spin(FORWARD, v_right, VOLT)
+
+        # Exit condition
+        if -10 < self.error < 10 and -10 < (self.error - self.prevError) < 10:
+            left_motor_1.stop()
+            left_motor_2.stop()
+            right_motor_1.stop()
+            right_motor_2.stop()
+            self.completed = True
+
+        self.prevMotorPower = self.motorPower
+        self.prevError = self.error
+
+class PIDTurn:
+    def __init__(self, degrees, max_time_msec):
+        self.kP, self.kI, self.kD = 2.1, 0, 12
+        self.slewRate = 0.1
+        self.target_degrees = degrees
+        self.max_time = max_time_msec
+        
+        # Reset motors
+        for m in [left_motor_1, left_motor_2, right_motor_1, right_motor_2]:
+            m.set_position(0, DEGREES)
+
+        # Timers
+        self.start_time = brain.timer.time(MSEC)
+        self.stall_start_time = brain.timer.time(MSEC)
+        
+        # PID Logic Variables
+        self.error = 0
+        self.integral = 0
+        self.derivative = 0
+        self.prevError = 0
+        self.motorPower = 0
+        self.prevMotorPower = 0
+        self.completed = False
+
+    def update(self):
+        # Check if already done or timed out
+        current_time = brain.timer.time(MSEC)
+        
+        if self.completed:
+            return
+
+        # Hard Timeout check
+        if (current_time - self.start_time) > self.max_time:
+            self.stop_and_finish()
+            return
+
+        # PID Calculation
+        currentRotation = imu.rotation(DEGREES)
+        self.error = self.target_degrees - currentRotation
+        
+        if -200 < self.error < 200:
+            self.integral += self.error
+            
+        self.derivative = self.error - self.prevError
+        self.motorPower = (self.kP * self.error) + (self.kI * self.integral) + (self.kD * self.derivative)
+
+        # Normalize and Slew
+        self.motorPower = max(-1, min(1, self.motorPower))
+        if self.motorPower > self.prevMotorPower + self.slewRate:
+            self.motorPower = self.prevMotorPower + self.slewRate
+        elif self.motorPower < self.prevMotorPower - self.slewRate:
+            self.motorPower = self.prevMotorPower - self.slewRate
+
+        # Spin Motors (Turning uses opposite voltages)
+        v = 11 * self.motorPower
+        left_motor_1.spin(FORWARD, v, VOLT)
+        left_motor_2.spin(FORWARD, v, VOLT)
+        right_motor_1.spin(FORWARD, -v, VOLT)
+        right_motor_2.spin(FORWARD, -v, VOLT)
+
+        # Exit Conditions
+        # 1. Target Reached
+        if -1 < self.error < 1 and -0.5 < (self.error - self.prevError) < 0.5:
+            self.stop_and_finish()
+            return
+
+        # 2. Stall/Oscillation Check
+        if abs(self.error - self.prevError) > 0.5:
+            self.stall_start_time = current_time
+        elif (current_time - self.stall_start_time) > 250:
+            self.stop_and_finish()
+            return
+
+        # Update Screen and Variables
+        controller_1.screen.clear_screen()
+        controller_1.screen.set_cursor(1,1)
+        controller_1.screen.print(currentRotation)
+
+        self.prevMotorPower = self.motorPower
+        self.prevError = self.error
+
+    def stop_and_finish(self):
+        left_motor_1.stop()
+        left_motor_2.stop()
+        right_motor_1.stop()
+        right_motor_2.stop()
+        self.completed = True
+
+
+def mission():
+    global ROBOT_STATE
+    global LAST_STATE
+
+    if ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
+        ROBOT_STATE = RAMP_DRIVE
+        LAST_STATE = IDLE
+    elif ROBOT_STATE == RAMP_DRIVE:
+        if LAST_STATE != RAMP_DRIVE:
+            drive_task = PIDDrive(100)
+            LAST_STATE = RAMP_DRIVE
+        drive_task.update()
+        if drive_task.completed:
+            ROBOT_STATE = SEARCHING
+    elif ROBOT_STATE == SEARCHING:
+        pass
+    elif ROBOT_STATE == APPROACHING:
+        pass
+    elif ROBOT_STATE == HARVESTING:
+        pass
+    elif ROBOT_STATE == DELIVERING:
+        pass
+    elif ROBOT_STATE == HARVEST_RESET:
+        pass
+    else:
+        print("67")
+
+
+while True:
+    mission()
