@@ -11,8 +11,11 @@ brain=Brain()
 controller_1 = Controller(PRIMARY)
 # AI Vision Color Descriptions
 # AI Vision Code Descriptions
-fruit_vision = AiVision(Ports.PORT16)
-april_vision = AiVision(Ports.PORT14)
+fruit__apricot = Colordesc(1, 233, 77, 81, 10, 0.19)
+fruit__lime = Colordesc(2, 50, 234, 125, 8, 0.28)
+fruit__grape = Colordesc(3, 146, 89, 195, 10, 0.2)
+fruit_vision = AiVision(Ports.PORT16, fruit__apricot, fruit__lime, fruit__grape)
+april_vision = AiVision(Ports.PORT14, AiVision.ALL_TAGS)
 imu = Inertial(Ports.PORT6)
 claw = Motor(Ports.PORT19, GearSetting.RATIO_18_1, False)
 elevate_a = Motor(Ports.PORT17, GearSetting.RATIO_18_1, False)
@@ -23,8 +26,8 @@ left_motor_2 = Motor(Ports.PORT4, GearSetting.RATIO_18_1, False)
 right_motor_1 = Motor(Ports.PORT12, GearSetting.RATIO_18_1, True)
 right_motor_2 = Motor(Ports.PORT5, GearSetting.RATIO_18_1, True)
 button = Bumper(brain.three_wire_port.a)
-line_tracker_h = Line(brain.three_wire_port.h)
-line_tracker_f = Line(brain.three_wire_port.f)
+line_tracker_left = Line(brain.three_wire_port.h)
+line_tracker_right = Line(brain.three_wire_port.f)
 
 
 # wait for rotation sensor to fully initialize
@@ -113,6 +116,11 @@ imu.set_rotation(0, DEGREES)
 GEAR_RATIO = 5/3
 WHEEL_DIAM = 10.4775
 CIRCUMFERENCE = math.pi * WHEEL_DIAM
+CAMERA_RATIO = 0.0052806653
+FRUIT_HEIGHT = 7.62
+# 37 cm
+# 39 pixels wide
+# 7.62 cm tall
 
 timer = Timer()
 class PIDDrive:
@@ -282,11 +290,44 @@ class PIDTurn:
         right_motor_2.stop()
         self.completed = True
 
+def detectFruit():
+    object1 = fruit_vision.take_snapshot(fruit__apricot)
+    object2 = fruit_vision.take_snapshot(fruit__lime)
+    object3 = fruit_vision.take_snapshot(fruit__grape)
 
+    if object1[0].score > 80:
+        # apricot logic
+        distance = FRUIT_HEIGHT / (object1[0].height * CAMERA_RATIO)
+        xDistance = (object1[0].centerX - 160) * distance * CAMERA_RATIO
+        desiredAngle = math.tan(xDistance / distance) * (180 / math.pi)
+        return desiredAngle, distance
+    elif object2[0].score > 80:
+        # lime logic
+        distance = FRUIT_HEIGHT / (object2[0].height * CAMERA_RATIO)
+        xDistance = (object2[0].centerX - 160) * distance * CAMERA_RATIO
+        desiredAngle = math.tan(xDistance / distance) * (180 / math.pi)
+        return desiredAngle, distance
+    elif object3[0].score > 80:
+        # grape logic
+        distance = FRUIT_HEIGHT / (object3[0].height * CAMERA_RATIO)
+        xDistance = (object3[0].centerX - 160) * distance * CAMERA_RATIO
+        desiredAngle = math.tan(xDistance / distance) * (180 / math.pi)
+        return desiredAngle, distance
+    else:
+        return 0, 0
+
+    
+TEST = 0
+fruit_count = 0
 def mission():
     global ROBOT_STATE
     global LAST_STATE
     global drive_task
+    global drive_task2
+    global turn_task
+    global fruit_count
+    global TEST
+    distance = -67
 
     if ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
         ROBOT_STATE = RAMP_DRIVE
@@ -300,11 +341,53 @@ def mission():
         else: 
             drive_task.update()
     elif ROBOT_STATE == SEARCHING:
-        pass
+        if TEST == 0:
+            desiredInfo = detectFruit()
+            if desiredInfo == (0, 0):
+                left_motor_1.set_velocity(50)
+                left_motor_2.set_velocity(50)
+                left_motor_1.spin(FORWARD)
+                left_motor_2.spin(FORWARD)
+            else:
+                left_motor_1.stop()
+                left_motor_2.stop()
+                desiredInfo = detectFruit()
+                distance = desiredInfo[1]
+                turn_task = PIDTurn(desiredInfo[0], 2500)
+                TEST = 1
+
+        if TEST == 1 and not turn_task.completed:
+            turn_task.update()
+        else:
+            ROBOT_STATE = APPROACHING
+            LAST_STATE = SEARCHING
+
     elif ROBOT_STATE == APPROACHING:
-        pass
+        if LAST_STATE != APPROACHING:
+            drive_task = PIDDrive(distance)
+            LAST_STATE = APPROACHING
+        if drive_task.completed:
+            ROBOT_STATE = HARVESTING
+            timer.reset()
+            drive_task2 = PIDDrive(-5)
+        else: 
+            drive_task.update()
     elif ROBOT_STATE == HARVESTING:
-        pass
+        if TEST == 1:
+            drive_task = PIDDrive(-5)
+            TEST = 2
+        if TEST == 2:
+            claw.spin(FORWARD)
+            if timer.time() > 2500:
+                drive_task.update()
+            elif drive_task.completed:
+                claw.spin_for(REVERSE, 0.2, SECONDS)
+                fruit_count += 1
+                TEST = 0
+                if fruit_count == 4:
+                    ROBOT_STATE = DELIVERING
+                else:
+                    ROBOT_STATE = SEARCHING
     elif ROBOT_STATE == DELIVERING:
         pass
     elif ROBOT_STATE == DEPOSIT_RESET:
