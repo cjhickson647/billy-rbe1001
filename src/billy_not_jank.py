@@ -377,6 +377,7 @@ def mission():
     global ROBOT_STATE
     global LAST_STATE
     global drive_task
+    global drive_task2
     global turn_task
     global fruit_count
     global ROBERT
