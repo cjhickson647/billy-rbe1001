@@ -306,20 +306,20 @@ def detectFruit():
         # apricot logic
         distance = FRUIT_HEIGHT / (object1[0].height * CAMERA_RATIO)
         xDistance = (object1[0].centerX - 160) * distance * CAMERA_RATIO
-        desiredAngle = math.tan(xDistance / distance) * (180 / math.pi)
-        return desiredAngle, distance
+        desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
+        return desiredAngle + imu.rotation(DEGREES), distance
     elif object2[0].score > 80:
         # lime logic
         distance = FRUIT_HEIGHT / (object2[0].height * CAMERA_RATIO)
         xDistance = (object2[0].centerX - 160) * distance * CAMERA_RATIO
-        desiredAngle = math.tan(xDistance / distance) * (180 / math.pi)
-        return desiredAngle, distance
+        desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
+        return desiredAngle + imu.rotation(DEGREES), distance
     elif object3[0].score > 80:
         # grape logic
         distance = FRUIT_HEIGHT / (object3[0].height * CAMERA_RATIO)
         xDistance = (object3[0].centerX - 160) * distance * CAMERA_RATIO
-        desiredAngle = math.tan(xDistance / distance) * (180 / math.pi)
-        return desiredAngle, distance
+        desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
+        return desiredAngle + imu.rotation(DEGREES), distance
     else:
         return 0, 0
 
@@ -327,9 +327,9 @@ def detectTree():
     object1 = fruit_vision.take_snapshot(fruit__tree)
     distance = FRUIT_HEIGHT / (object1[0].height * CAMERA_RATIO)
     xDistance = (object1[0].centerX - 160) * distance * CAMERA_RATIO
-    desiredAngle = math.tan(xDistance / distance) * (180 / math.pi)
+    desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
     if object1[0].score > 80:
-        return desiredAngle, distance
+        return desiredAngle +imu.rotation(DEGREES), distance
     else:
         return 0,0
 
@@ -384,6 +384,7 @@ def mission():
     if ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
         ROBOT_STATE = RAMP_DRIVE
         LAST_STATE = IDLE
+
     elif ROBOT_STATE == RAMP_DRIVE:
         if LAST_STATE != RAMP_DRIVE:
             drive_task = PIDDrive(292)
@@ -392,17 +393,24 @@ def mission():
             ROBOT_STATE = SEARCHING
         else: 
             drive_task.update()
+
     elif ROBOT_STATE == SEARCHING:
         if ROBERT == 0:
             desiredInfo = detectFruit()
             if desiredInfo == (0, 0):
                 left_motor_1.set_velocity(50)
                 left_motor_2.set_velocity(50)
+                right_motor_1.set_velocity(50)
+                right_motor_2.set_velocity(50)
                 left_motor_1.spin(FORWARD)
                 left_motor_2.spin(FORWARD)
+                right_motor_1.spin(REVERSE)
+                right_motor_2.spin(REVERSE)
             else:
                 left_motor_1.stop()
                 left_motor_2.stop()
+                right_motor_1.stop()
+                right_motor_2.stop()
                 desiredInfo = detectFruit()
                 distance = desiredInfo[1]
                 turn_task = PIDTurn(desiredInfo[0], 2500)
@@ -424,6 +432,7 @@ def mission():
             drive_task2 = PIDDrive(-5)
         else: 
             drive_task.update()
+
     elif ROBOT_STATE == HARVESTING:
         if ROBERT == 1:
             drive_task = PIDDrive(-5)
@@ -441,6 +450,7 @@ def mission():
                 else:
                     ROBOT_STATE = SEARCHING
                     ROBERT = 0
+
     elif ROBOT_STATE == AVOID_DANGER:
         if ROBERT == 3:
             drive_task = PIDDrive(-10.24)
@@ -466,13 +476,12 @@ def mission():
             if timer.time() > 500:
                 distance_values.append(ultrasonic.distance(MM)*10)
                 angle_values.append(imu.rotation(DEGREES))
-            if imu.rotation(DEGREES) == heading + 360:
+            if imu.rotation(DEGREES) >= heading + 360:
                 ROBERT = 6
         if ROBERT == 6:
-            distance_values.sort()
-            angle_values.sort()
-            desiredDistance = distance_values[0]
-            desiredAngle = angle_values[0]
+            desiredDistance = min(distance_values)
+            min_index = distance_values.index(desiredDistance)
+            desiredAngle = angle_values[min_index]
             turn_task = PIDTurn(desiredAngle + 180, 2500)
             ROBERT = 7
         if ROBERT == 7:
@@ -492,6 +501,7 @@ def mission():
                 desiredAngle = info[0]
                 distance = info[1]
                 ROBERT = 9
+
     elif ROBOT_STATE == PANIC:
         if ROBERT == 9:
             turn_task = PIDTurn(desiredAngle, 2500)
@@ -503,6 +513,7 @@ def mission():
                 ROBERT = 5
                 timer.reset()
                 heading = imu.rotation(DEGREES)
+
     elif ROBOT_STATE == FIND_LINE:
         if ROBERT == 11:
             drive_task = PIDDrive(67)
@@ -537,3 +548,4 @@ def mission():
 
 while True:
     mission()
+    wait(20, MSEC)
