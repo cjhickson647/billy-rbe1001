@@ -346,7 +346,7 @@ def line_roberting():
     right_reflectivity = line_tracker_left.reflectivity()
     left_reflectivity = line_tracker_right.reflectivity()
 
-    intersection_reflectivity = 15.67
+    intersection_reflectivity = 40
     line_error = right_reflectivity - left_reflectivity
     turning_effort = Kp * line_error
     
@@ -354,11 +354,11 @@ def line_roberting():
     
     if (right_reflectivity > intersection_reflectivity) and (left_reflectivity > intersection_reflectivity):
         # do intersection stuff
-        if ultrasonic.distance(MM) > 670000000000000000000000000000000000000000000000000000000000000000000:
+        if ultrasonic.distance(MM) > 2200:
             intersectionCount += 1
             return 0, intersectionCount
         
-        elif ultrasonic.distance(MM) < 0.00000000000000000000000000000000000000000000000000000000000000000067:
+        elif ultrasonic.distance(MM) < 2200:
             return 1, -1
 
     else:
@@ -373,6 +373,14 @@ ROBERT = 0
 fruit_count = 0
 distance_values = []
 angle_values = []
+distance = 0
+turning = False
+heading = 67
+distance = -67
+desiredAngle = 670
+currentFruit = 0
+turn_task = PIDDrive(0)
+drive_task = PIDDrive(0)
 def mission():
     global ROBOT_STATE
     global LAST_STATE
@@ -385,11 +393,10 @@ def mission():
     global angle_values
     global heading
     global intersectionCount
-    turning = False
-    heading = 67
-    distance = -67
-    desiredAngle = 670
-    currentFruit = 0
+    global distance
+    global desiredAngle
+    global currentFruit
+    global turning
 
     if ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
         ROBOT_STATE = RAMP_DRIVE
@@ -407,7 +414,7 @@ def mission():
     elif ROBOT_STATE == SEARCHING:
         if ROBERT == 0:
             desiredInfo = detectFruit()
-            if desiredInfo == (0, 0):
+            if desiredInfo[0] == 0 and desiredInfo[1] == 0:
                 left_motor_1.set_velocity(50)
                 left_motor_2.set_velocity(50)
                 right_motor_1.set_velocity(50)
@@ -417,43 +424,60 @@ def mission():
                 right_motor_1.spin(REVERSE)
                 right_motor_2.spin(REVERSE)
             else:
+                global distance
                 left_motor_1.stop()
                 left_motor_2.stop()
                 right_motor_1.stop()
                 right_motor_2.stop()
                 desiredInfo = detectFruit()
+                print(desiredInfo[0])
+                print(desiredInfo[1])
+                global distance
                 distance = desiredInfo[1]
                 currentFruit = desiredInfo[2]
                 turn_task = PIDTurn(desiredInfo[0], 2500)
                 ROBERT = 1
 
-        if ROBERT == 1 and not turn_task.completed:
+        if ROBERT == 1:
             turn_task.update()
-        else:
+        if turn_task.completed:
             ROBOT_STATE = APPROACHING
             LAST_STATE = SEARCHING
 
     elif ROBOT_STATE == APPROACHING:
         if LAST_STATE != APPROACHING:
-            drive_task = PIDDrive(distance)
+            print(distance)
+            if turning == True:
+                drive_task = PIDDrive(distance)
+            else:
+                drive_task = PIDDrive(distance/2)
             LAST_STATE = APPROACHING
-        if drive_task.completed:
-            ROBOT_STATE = HARVESTING
+        
+        # print(turning)
+        if drive_task.completed and turning == False:
+            # ROBOT_STATE = HARVESTING
+            ROBOT_STATE = SEARCHING
+            ROBERT = 0
             timer.reset()
-            drive_task2 = PIDDrive(-5)
+            turning = True
+            print("this is true")
+            # drive_task2 = PIDDrive(-5)
+        elif drive_task.completed and turning == True:
+            timer.reset()
+            ROBOT_STATE = HARVESTING
         else: 
             drive_task.update()
 
     elif ROBOT_STATE == HARVESTING:
         if ROBERT == 1:
+            del drive_task
             drive_task = PIDDrive(-5)
             ROBERT = 2
         if ROBERT == 2:
             claw.spin(FORWARD)
-            if timer.time() > 2500:
-                drive_task.update()
-            elif drive_task.completed:
-                claw.spin_for(REVERSE, 0.2, SECONDS)
+            if drive_task.completed:
+                print("your mom")
+                claw.spin_for(REVERSE, 0.2, SECONDS, False)
                 fruit_count += 1
                 if fruit_count == 4:
                     ROBOT_STATE = AVOID_DANGER
@@ -461,6 +485,8 @@ def mission():
                 else:
                     ROBOT_STATE = SEARCHING
                     ROBERT = 0
+            if timer.time() > 2.5:
+                drive_task.update()
 
     elif ROBOT_STATE == AVOID_DANGER:
         if ROBERT == 3:
@@ -515,7 +541,7 @@ def mission():
 
     elif ROBOT_STATE == PANIC:
         if ROBERT == 9:
-            turn_task = PIDTurn(desiredAngle, 2500)
+            turn_task = PIDTurn(desiredAngle + imu.rotation(DEGREES), 2500)
             ROBERT = 10
         if ROBERT == 10:
             turn_task.update()
@@ -614,9 +640,15 @@ def mission():
 while True:
     mission()
     controller_1.screen.clear_screen()
-    controller_1.screen.print("{:.2f}".format("ROBOT_STATE", ROBOT_STATE))
+    brain.screen.clear_screen()
+    controller_1.screen.set_cursor(1,1)
+    brain.screen.set_cursor(1,1)
+    controller_1.screen.print("ROBOT_STATE: {:.2f}".format(ROBOT_STATE))
     controller_1.screen.next_row()
-    controller_1.screen.print("{:.2f}".format("ROBERT", ROBERT))
+    controller_1.screen.print("ROBERT: {:.2f}".format(ROBERT))
     controller_1.screen.next_row()
-    controller_1.screen.print("{:.2f}".format("HEADING", imu.rotation(DEGREES)))
+    controller_1.screen.print("HEADING: {:.2f}".format(imu.rotation(DEGREES)))
+    # brain.screen.print(ultrasonic.distance(MM))
+    # brain.screen.print("{:.2f}, {:.2f}".format(line_tracker_left.reflectivity(), line_tracker_right.reflectivity()))
+
     wait(20, MSEC)
