@@ -286,13 +286,14 @@ class PIDTurn:
 def mission():
     global ROBOT_STATE
     global LAST_STATE
+    global drive_task
 
     if ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
         ROBOT_STATE = RAMP_DRIVE
         LAST_STATE = IDLE
     elif ROBOT_STATE == RAMP_DRIVE:
         if LAST_STATE != RAMP_DRIVE:
-            drive_task = PIDDrive(100)
+            drive_task = PIDDrive(292)
             LAST_STATE = RAMP_DRIVE
         if drive_task.completed:
             ROBOT_STATE = SEARCHING
