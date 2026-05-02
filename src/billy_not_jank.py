@@ -22,6 +22,7 @@ claw = Motor(Ports.PORT19, GearSetting.RATIO_18_1, False)
 elevate_a = Motor(Ports.PORT17, GearSetting.RATIO_18_1, False)
 elevate_b = Motor(Ports.PORT18, GearSetting.RATIO_18_1, False)
 elevator = MotorGroup(elevate_a, elevate_b)
+flap = Motor(Ports.PORT10, GearSetting.RATIO_18_1, False)
 left_motor_1 = Motor(Ports.PORT21, GearSetting.RATIO_18_1, False)
 left_motor_2 = Motor(Ports.PORT4, GearSetting.RATIO_18_1, False)
 right_motor_1 = Motor(Ports.PORT12, GearSetting.RATIO_18_1, True)
@@ -102,8 +103,8 @@ HARVESTING = 4
 AVOID_DANGER = 5
 FIND_WALL = 6
 PANIC = 7
-DELIVERING = 8
 FIND_LINE = 9
+DELIVERING = 8
 LINE_FOLLOWING = 10
 DEPOSIT_RESET = 11
 DOING_YA_MOM = 67
@@ -307,22 +308,26 @@ def detectFruit():
         distance = FRUIT_HEIGHT / (object1[0].height * CAMERA_RATIO)
         xDistance = (object1[0].centerX - 160) * distance * CAMERA_RATIO
         desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
-        return desiredAngle + imu.rotation(DEGREES), distance
+        return desiredAngle + imu.rotation(DEGREES), distance, 20
     elif object2[0].score > 80:
         # lime logic
         distance = FRUIT_HEIGHT / (object2[0].height * CAMERA_RATIO)
         xDistance = (object2[0].centerX - 160) * distance * CAMERA_RATIO
         desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
-        return desiredAngle + imu.rotation(DEGREES), distance
+        return desiredAngle + imu.rotation(DEGREES), distance, 22
     elif object3[0].score > 80:
         # grape logic
         distance = FRUIT_HEIGHT / (object3[0].height * CAMERA_RATIO)
         xDistance = (object3[0].centerX - 160) * distance * CAMERA_RATIO
         desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
-        return desiredAngle + imu.rotation(DEGREES), distance
+        return desiredAngle + imu.rotation(DEGREES), distance, 23
     else:
-        return 0, 0
+        return 0, 0, 0
 
+def detectTag():
+    object1 = april_vision.take_snapshot(AiVision.ALL_TAGS)
+    if object1[0].exists:
+        return object1[0].id
 def detectTree():
     object1 = fruit_vision.take_snapshot(fruit__tree)
     distance = FRUIT_HEIGHT / (object1[0].height * CAMERA_RATIO)
@@ -334,7 +339,9 @@ def detectTree():
         return 0,0
 
 Kp = 0.3
+intersectionCount = 0
 def line_roberting():
+    global intersectionCount
     # robert is doing the line
     right_reflectivity = line_tracker_left.reflectivity()
     left_reflectivity = line_tracker_right.reflectivity()
@@ -348,19 +355,19 @@ def line_roberting():
     if (right_reflectivity > intersection_reflectivity) and (left_reflectivity > intersection_reflectivity):
         # do intersection stuff
         if ultrasonic.distance(MM) > 670000000000000000000000000000000000000000000000000000000000000000000:
-            # don't worry about it!!
-            pass
+            intersectionCount += 1
+            return 0, intersectionCount
         
         elif ultrasonic.distance(MM) < 0.00000000000000000000000000000000000000000000000000000000000000000067:
-            # do line stuff
-            pass
+            return 1, -1
 
-        pass
     else:
         left_motor_1.spin(REVERSE, base_speed + turning_effort, RPM)
         left_motor_2.spin(REVERSE, base_speed + turning_effort, RPM)
         right_motor_1.spin(REVERSE, base_speed - turning_effort, RPM)
         right_motor_2.spin(REVERSE, base_speed - turning_effort, RPM)
+        return -1, -1
+    return -1, -1
 
 ROBERT = 0
 fruit_count = 0
@@ -370,16 +377,18 @@ def mission():
     global ROBOT_STATE
     global LAST_STATE
     global drive_task
-    global drive_task2
     global turn_task
     global fruit_count
     global ROBERT
     global distance_values
     global angle_values
     global heading
+    global intersectionCount
+    turning = False
     heading = 67
     distance = -67
     desiredAngle = 670
+    currentFruit = 0
 
     if ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
         ROBOT_STATE = RAMP_DRIVE
@@ -413,6 +422,7 @@ def mission():
                 right_motor_2.stop()
                 desiredInfo = detectFruit()
                 distance = desiredInfo[1]
+                currentFruit = desiredInfo[2]
                 turn_task = PIDTurn(desiredInfo[0], 2500)
                 ROBERT = 1
 
@@ -445,7 +455,7 @@ def mission():
                 claw.spin_for(REVERSE, 0.2, SECONDS)
                 fruit_count += 1
                 if fruit_count == 4:
-                    ROBOT_STATE = DELIVERING
+                    ROBOT_STATE = AVOID_DANGER
                     ROBERT = 3
                 else:
                     ROBOT_STATE = SEARCHING
@@ -538,10 +548,64 @@ def mission():
             if turn_task.completed:
                 ROBERT = 17
         if ROBERT == 17:
-            line_roberting()
-    
+            if detectTag() == currentFruit:
+                ROBERT = 18
+                ROBOT_STATE = DELIVERING
+            else:
+                if turning == True:
+                    turn_task.update()
+                elif turn_task.completed:
+                    turning = False
+                else:
+                    fieldPosition = line_roberting()
+                    if fieldPosition[0] == 0:
+                        if fieldPosition[1] == 0:
+                            turn_task = PIDTurn(imu.rotation(DEGREES) + 180, 2500)
+                            turning = True
+                        if fieldPosition[1] == 2:
+                            turn_task = PIDTurn(imu.rotation(DEGREES) - 90, 2500)
+                            turning = True
+                            intersectionCount = 0
+                    elif fieldPosition[0] == 1:
+                        if fieldPosition[1]:
+                            turn_task = PIDTurn(imu.rotation(DEGREES) - 90, 2500)
+                            turning = True
+                            intersectionCount = 0
+    elif ROBOT_STATE == DELIVERING:
+        if ROBERT == 18:
+            turn_task = PIDTurn(imu.rotation(DEGREES) + 90, 3000)
+            ROBERT = 19
+        if ROBERT == 19:
+            turn_task.update()
+            if turn_task.completed:
+                ROBERT = 20
+                ROBOT_STATE = DEPOSIT_RESET
+                timer.reset()
+
     elif ROBOT_STATE == DEPOSIT_RESET:
-        pass
+        left_motor_1.spin(FORWARD)
+        left_motor_2.spin(FORWARD)
+        right_motor_1.spin(FORWARD)
+        right_motor_2.spin(FORWARD)
+        if button.pressing:
+            left_motor_1.stop()
+            left_motor_2.stop()
+            right_motor_1.stop()
+            right_motor_2.stop()
+            flap.spin(FORWARD)
+            if timer.time() >= 3000:
+                flap.spin(REVERSE)
+                turning = True
+        elif turning == True:
+            timer.reset()
+            turning = False
+        elif timer.time() >= 2000:
+                ROBERT = 0
+                fruit_count = 0
+                intersectionCount = 0
+                distance_values.clear()
+                angle_values.clear()
+                ROBOT_STATE = SEARCHING
     else:
         print("67")
 
