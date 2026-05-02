@@ -95,7 +95,7 @@ SEARCHING = 2
 APPROACHING = 3
 HARVESTING = 4
 DELIVERING = 5
-HARVEST_RESET = 6
+DEPOSIT_RESET = 6
 DOING_YA_MOM = 67
 
 ROBOT_STATE = IDLE
@@ -307,7 +307,7 @@ def mission():
         pass
     elif ROBOT_STATE == DELIVERING:
         pass
-    elif ROBOT_STATE == HARVEST_RESET:
+    elif ROBOT_STATE == DEPOSIT_RESET:
         pass
     else:
         print("67")
