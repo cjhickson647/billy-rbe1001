@@ -104,7 +104,8 @@ FIND_WALL = 6
 PANIC = 7
 DELIVERING = 8
 FIND_LINE = 9
-DEPOSIT_RESET = 10
+LINE_FOLLOWING = 10
+DEPOSIT_RESET = 11
 DOING_YA_MOM = 67
 
 ROBOT_STATE = IDLE
@@ -498,6 +499,7 @@ def mission():
                 ROBERT = 17
         if ROBERT == 17:
             pass
+    
     elif ROBOT_STATE == DEPOSIT_RESET:
         pass
     else:
