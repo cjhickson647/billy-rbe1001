@@ -496,7 +496,7 @@ def mission():
             turn_task.update()
             if turn_task.completed:
                 ROBERT = 17
-        if ROBERT = 17:
+        if ROBERT == 17:
             pass
     elif ROBOT_STATE == DEPOSIT_RESET:
         pass
