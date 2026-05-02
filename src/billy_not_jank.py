@@ -613,4 +613,10 @@ def mission():
 
 while True:
     mission()
+    controller_1.screen.clear_screen()
+    controller_1.screen.print("{:.2f}".format("ROBOT_STATE", ROBOT_STATE))
+    controller_1.screen.next_row()
+    controller_1.screen.print("{:.2f}".format("ROBERT", ROBERT))
+    controller_1.screen.next_row()
+    controller_1.screen.print("{:.2f}".format("HEADING", imu.rotation(DEGREES)))
     wait(20, MSEC)
