@@ -477,7 +477,7 @@ def mission():
             claw.spin(FORWARD)
             if drive_task.completed:
                 print("your mom")
-                claw.spin_for(REVERSE, 0.2, SECONDS, False)
+                claw.spin_for(REVERSE, 3, SECONDS, False)
                 fruit_count += 1
                 if fruit_count == 4:
                     ROBOT_STATE = AVOID_DANGER
@@ -494,12 +494,12 @@ def mission():
             ROBERT = 4
         if ROBERT == 4:
             drive_task.update()
-        elif drive_task.completed:
-            # global heading
-            ROBOT_STATE = FIND_WALL
-            ROBERT = 5
-            timer.reset()
-            heading = imu.rotation(DEGREES)
+            if drive_task.completed:
+                # global heading
+                ROBOT_STATE = FIND_WALL
+                ROBERT = 5
+                timer.reset()
+                heading = imu.rotation(DEGREES)
             
 
     elif ROBOT_STATE == FIND_WALL:
