@@ -248,6 +248,7 @@ def UltrasonicSensorCD():
 
 #Dead Reckoning:
 def dead_Reckoning():
+    ROBERT = 0
     motor_8.set_stopping(HOLD)
     motor_8.set_velocity(67, PERCENT)
     motor_8.set_position(0,DEGREES)

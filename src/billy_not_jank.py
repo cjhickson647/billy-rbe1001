@@ -333,6 +333,35 @@ def detectTree():
     else:
         return 0,0
 
+Kp = 0.3
+def line_roberting():
+    # robert is doing the line
+    right_reflectivity = line_tracker_left.reflectivity()
+    left_reflectivity = line_tracker_right.reflectivity()
+
+    intersection_reflectivity = 15.67
+    line_error = right_reflectivity - left_reflectivity
+    turning_effort = Kp * line_error
+    
+    base_speed = (20 / CIRCUMFERENCE) * 60 * GEAR_RATIO
+    
+    if (right_reflectivity > intersection_reflectivity) and (left_reflectivity > intersection_reflectivity):
+        # do intersection stuff
+        if ultrasonic.distance(MM) > 670000000000000000000000000000000000000000000000000000000000000000000:
+            # don't worry about it!!
+            pass
+        
+        elif ultrasonic.distance(MM) < 0.00000000000000000000000000000000000000000000000000000000000000000067:
+            # do line stuff
+            pass
+
+        pass
+    else:
+        left_motor_1.spin(REVERSE, base_speed + turning_effort, RPM)
+        left_motor_2.spin(REVERSE, base_speed + turning_effort, RPM)
+        right_motor_1.spin(REVERSE, base_speed - turning_effort, RPM)
+        right_motor_2.spin(REVERSE, base_speed - turning_effort, RPM)
+
 ROBERT = 0
 fruit_count = 0
 distance_values = []
@@ -498,7 +527,7 @@ def mission():
             if turn_task.completed:
                 ROBERT = 17
         if ROBERT == 17:
-            pass
+            line_roberting()
     
     elif ROBOT_STATE == DEPOSIT_RESET:
         pass
