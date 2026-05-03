@@ -11,9 +11,11 @@ brain=Brain()
 controller_1 = Controller(PRIMARY)
 # AI Vision Color Descriptions
 # AI Vision Code Descriptions
-fruit__apricot = Colordesc(1, 233, 77, 81, 10, 0.19)
-fruit__lime = Colordesc(2, 50, 234, 125, 8, 0.28)
-fruit__grape = Colordesc(3, 146, 89, 195, 10, 0.2)
+# fruit__apricot = Colordesc(1, 233, 77, 81, 10, 0.19)
+fruit__apricot = Colordesc(1, 233, 112, 103, 15.67, 0.21)
+fruit__lime = Colordesc(2, 91, 255, 144, 9, 0.21)
+# fruit__grape = Colordesc(3, 146, 89, 195, 10, 0.2)
+fruit__grape = Colordesc(3, 165, 119, 202, 40, 0.21)
 fruit__tree = Colordesc(4, 121, 163, 160, 40, 0.1)
 fruit_vision = AiVision(Ports.PORT16, fruit__apricot, fruit__lime, fruit__grape, fruit__tree)
 april_vision = AiVision(Ports.PORT14, AiVision.ALL_TAGS)
@@ -109,13 +111,14 @@ LINE_FOLLOWING = 10
 DEPOSIT_RESET = 11
 DOING_YA_MOM = 67
 
-ROBOT_STATE = IDLE
+ROBOT_STATE = SEARCHING
 LAST_STATE = -1
 
 left_motor_1.set_stopping(HOLD)
 left_motor_2.set_stopping(HOLD)
 right_motor_1.set_stopping(HOLD)
 right_motor_2.set_stopping(HOLD)
+claw.set_position(0, DEGREES)
 
 imu.calibrate()
 wait(2, SECONDS)
@@ -126,6 +129,7 @@ WHEEL_DIAM = 10.4775
 CIRCUMFERENCE = math.pi * WHEEL_DIAM
 CAMERA_RATIO = 0.0052806653
 FRUIT_HEIGHT = 7.62
+CAMERA_DIFF = -6.7
 # 37 cm
 # 39 pixels wide
 # 7.62 cm tall
@@ -299,42 +303,53 @@ class PIDTurn:
         self.completed = True
 
 def detectFruit():
-    object1 = fruit_vision.take_snapshot(fruit__apricot)
-    object2 = fruit_vision.take_snapshot(fruit__lime)
-    object3 = fruit_vision.take_snapshot(fruit__grape)
+    objects = [
+        {"type": 20, "snap": fruit_vision.take_snapshot(fruit__apricot)},
+        {"type": 22, "snap": fruit_vision.take_snapshot(fruit__lime)},
+        {"type": 23, "snap": fruit_vision.take_snapshot(fruit__grape)}
+    ]
 
-    if object1[0].score > 80:
-        # apricot logic
-        distance = FRUIT_HEIGHT / (object1[0].height * CAMERA_RATIO)
-        xDistance = (object1[0].centerX - 160) * distance * CAMERA_RATIO
-        desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
-        return desiredAngle + imu.rotation(DEGREES), distance, 20
-    elif object2[0].score > 80:
-        # lime logic
-        distance = FRUIT_HEIGHT / (object2[0].height * CAMERA_RATIO)
-        xDistance = (object2[0].centerX - 160) * distance * CAMERA_RATIO
-        desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
-        return desiredAngle + imu.rotation(DEGREES), distance, 22
-    elif object3[0].score > 80:
-        # grape logic
-        distance = FRUIT_HEIGHT / (object3[0].height * CAMERA_RATIO)
-        xDistance = (object3[0].centerX - 160) * distance * CAMERA_RATIO
-        desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
-        return desiredAngle + imu.rotation(DEGREES), distance, 23
-    else:
+    Y_THRESHOLD = 100 
+    detected_list = []
+
+    for item in objects:
+        snap = item["snap"]
+        if snap and len(snap) > 0 and snap[0].score > 80 and snap[0].centerY > Y_THRESHOLD:
+            # Use the consistent 3-inch height you calibrated
+            dist = FRUIT_HEIGHT / (snap[0].height * CAMERA_RATIO)
+            
+            # Store the data so we can compare them
+            detected_list.append({
+                "type": item["type"],
+                "distance": dist,
+                "centerX": snap[0].centerX,
+                "rotation": imu.rotation(DEGREES)
+            })
+
+    if not detected_list:
         return 0, 0, 0
+    
+    detected_list.sort(key=lambda x: x["distance"])
+    target = detected_list[0]
+
+    xDistance = (target["centerX"] - 160) * target["distance"] * CAMERA_RATIO
+    desiredAngle = math.atan2(xDistance, target["distance"]) * (180 / math.pi)
+    
+    # Return angle, distance with padding, and the fruit ID
+    return desiredAngle + target["rotation"], target["distance"] - CAMERA_DIFF, target["type"]
 
 def detectTag():
     object1 = april_vision.take_snapshot(AiVision.ALL_TAGS)
     if object1[0].exists:
         return object1[0].id
+    
 def detectTree():
     object1 = fruit_vision.take_snapshot(fruit__tree)
     distance = FRUIT_HEIGHT / (object1[0].height * CAMERA_RATIO)
     xDistance = (object1[0].centerX - 160) * distance * CAMERA_RATIO
     desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
     if object1[0].score > 80:
-        return desiredAngle +imu.rotation(DEGREES), distance
+        return desiredAngle +imu.rotation(DEGREES), distance - CAMERA_DIFF
     else:
         return 0,0
 
@@ -377,6 +392,7 @@ distance = 0
 turning = False
 heading = 67
 distance = -67
+desiredDistance = 0
 desiredAngle = 670
 currentFruit = 0
 turn_task = PIDDrive(0)
@@ -397,6 +413,7 @@ def mission():
     global desiredAngle
     global currentFruit
     global turning
+    global desiredDistance
 
     if ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
         ROBOT_STATE = RAMP_DRIVE
@@ -438,19 +455,19 @@ def mission():
                 turn_task = PIDTurn(desiredInfo[0], 2500)
                 ROBERT = 1
 
-        if ROBERT == 1:
+        elif ROBERT == 1:
             turn_task.update()
-        if turn_task.completed:
-            ROBOT_STATE = APPROACHING
-            LAST_STATE = SEARCHING
+            if turn_task.completed:
+                ROBOT_STATE = APPROACHING
+                LAST_STATE = SEARCHING
 
     elif ROBOT_STATE == APPROACHING:
         if LAST_STATE != APPROACHING:
             print(distance)
             if turning == True:
-                drive_task = PIDDrive(distance)
+                drive_task = PIDDrive(distance*0)
             else:
-                drive_task = PIDDrive(distance/2)
+                drive_task = PIDDrive(distance)
             LAST_STATE = APPROACHING
         
         # print(turning)
@@ -470,14 +487,14 @@ def mission():
 
     elif ROBOT_STATE == HARVESTING:
         if ROBERT == 1:
-            del drive_task
-            drive_task = PIDDrive(-5)
+            # del drive_task
+            drive_task = PIDDrive(-7)
             ROBERT = 2
-        if ROBERT == 2:
+        elif ROBERT == 2:
             claw.spin(FORWARD)
             if drive_task.completed:
                 print("your mom")
-                claw.spin_for(REVERSE, 3, SECONDS, False)
+                claw.spin_to_position(0, DEGREES, False)
                 fruit_count += 1
                 if fruit_count == 4:
                     ROBOT_STATE = AVOID_DANGER
@@ -485,7 +502,7 @@ def mission():
                 else:
                     ROBOT_STATE = SEARCHING
                     ROBERT = 0
-            if timer.time() > 2.5:
+            if timer.time() > 2500:
                 drive_task.update()
 
     elif ROBOT_STATE == AVOID_DANGER:
