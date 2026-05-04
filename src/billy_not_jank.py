@@ -24,7 +24,7 @@ claw = Motor(Ports.PORT19, GearSetting.RATIO_18_1, False)
 elevate_a = Motor(Ports.PORT17, GearSetting.RATIO_18_1, False)
 elevate_b = Motor(Ports.PORT18, GearSetting.RATIO_18_1, False)
 elevator = MotorGroup(elevate_a, elevate_b)
-flap = Motor(Ports.PORT10, GearSetting.RATIO_18_1, False)
+flap = Motor(Ports.PORT7, GearSetting.RATIO_18_1, False)
 left_motor_1 = Motor(Ports.PORT21, GearSetting.RATIO_18_1, False)
 left_motor_2 = Motor(Ports.PORT4, GearSetting.RATIO_18_1, False)
 right_motor_1 = Motor(Ports.PORT12, GearSetting.RATIO_18_1, True)
@@ -133,6 +133,7 @@ FRUIT_HEIGHT = 7.62
 CAMERA_DIFF = -6.7
 # 37 cm
 # 39 pixels wide
+cringe = ""
 # 7.62 cm tall
 
 timer = Timer()
@@ -140,9 +141,9 @@ class PIDDrive:
     def __init__(self, distance):
         timer.clear()
         # set gain constants
-        self.kP, self.kI, self.kD = 5, 0.00, 31.425
+        self.kP, self.kI, self.kD = 5, 0.00, 85 #31.425
         self.kP_steer = 0.0
-        self.slewRate = 0.1
+        self.slewRate = 0.05
         
         # reset motors
         left_motor_1.set_position(0, DEGREES)
@@ -216,6 +217,7 @@ class PIDDrive:
         self.prevError = self.error
 
 class PIDTurn:
+    global cringe
     def __init__(self, degrees, max_time_msec):
         self.kP, self.kI, self.kD = 2.1, 0, 12
         self.slewRate = 0.1
@@ -240,9 +242,12 @@ class PIDTurn:
         self.completed = False
 
     def update(self):
+        global cringe
+        cringe = "stupid"
         # Check if already done or timed out
         global left_motor_1, left_motor_2, right_motor_1, right_motor_2
         current_time = brain.timer.time(MSEC)
+        cringe = "stupid"
         
         if self.completed:
             return
@@ -250,6 +255,7 @@ class PIDTurn:
         # Hard Timeout check
         if (current_time - self.start_time) > self.max_time:
             self.stop_and_finish()
+            cringe = "fat"
             return
 
         # PID Calculation
@@ -275,7 +281,6 @@ class PIDTurn:
         left_motor_2.spin(FORWARD, v, VOLT)
         right_motor_1.spin(FORWARD, -v, VOLT)
         right_motor_2.spin(FORWARD, -v, VOLT)
-        cringe = v
 
         # Exit Conditions
         # 1. Target Reached
@@ -294,9 +299,10 @@ class PIDTurn:
         # stuck in oscillation
         elif (current_time - self.stall_start_time > 250):
             self.stop_and_finish()
+            cringe = "chud"
             return
-    
-        # Update Screen and Variables
+        
+         # Update Screen and Variables
         controller_1.screen.clear_screen()
         controller_1.screen.set_cursor(1,1)
         controller_1.screen.print(currentRotation)
@@ -314,16 +320,17 @@ class PIDTurn:
 def execute_threaded_turn(target_angle, timeout):
     global left_motor_1, left_motor_2, right_motor_1, right_motor_2
     global is_turning
+    global cringe
     is_turning = True
     # Create the task locally so it has a fresh start_time
     task = PIDTurn(target_angle, timeout)
     
     # High-frequency loop dedicated ONLY to this turn
     while not task.completed:
-        print(task.update())
+        task.update()
         wait(20, MSEC)
-    if task.completed:
-        is_turning = False
+        # print(DEBUG)
+    is_turning = False
 
 dist = 0
 def detectFruit():
@@ -405,18 +412,16 @@ def line_roberting():
             return 1, -1
 
     else:
-        left_motor_1.spin(REVERSE, base_speed + turning_effort, RPM)
-        left_motor_2.spin(REVERSE, base_speed + turning_effort, RPM)
-        right_motor_1.spin(REVERSE, base_speed - turning_effort, RPM)
-        right_motor_2.spin(REVERSE, base_speed - turning_effort, RPM)
+        left_motor_1.spin(REVERSE, base_speed - turning_effort, RPM)
+        left_motor_2.spin(REVERSE, base_speed - turning_effort, RPM)
+        right_motor_1.spin(REVERSE, base_speed + turning_effort, RPM)
+        right_motor_2.spin(REVERSE, base_speed + turning_effort, RPM)
         return -1, -1
     return -1, -1
 
 ROBERT = 0
-FUCK = 6767
-ROBOT_STATE = FUCK
 is_turning = False
-fruit_count = 0
+fruit_count = 3
 distance_values = []
 angle_values = []
 distance = 0
@@ -425,13 +430,16 @@ heading = 67
 distance = -67
 desiredDistance = 0
 desiredAngle = 670
-currentFruit = 0
+currentFruit = 20
+DEBUG = -674206921426767
+# ROBOT_STATE = DELIVERING
 turn_task = PIDTurn(0, 0)
 drive_task = PIDDrive(0)
 def mission():
     global ROBOT_STATE
     global cringe
     global LAST_STATE
+    random  = 1
     global drive_task
     global drive_task2
     global turn_task
@@ -452,6 +460,9 @@ def mission():
     if ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
         ROBOT_STATE = RAMP_DRIVE
         LAST_STATE = IDLE
+    
+    elif ROBOT_STATE == DEBUG:
+        line_roberting()
         
     elif ROBOT_STATE == RAMP_DRIVE:
         if LAST_STATE != RAMP_DRIVE:
@@ -464,6 +475,7 @@ def mission():
 
     elif ROBOT_STATE == SEARCHING:
         if ROBERT == 0:
+            global turn_thread
             desiredInfo = detectFruit()
             if desiredInfo[0] == 0 and desiredInfo[1] == 0:
                 left_motor_1.set_velocity(50)
@@ -476,7 +488,6 @@ def mission():
                 right_motor_2.spin(REVERSE)
             else:
                 if desiredInfo[1] > 60: # If fruit is further than 60cm
-                    print("Fruit too far, backing up to recalibrate...")
                     left_motor_1.set_velocity(50)
                     left_motor_2.set_velocity(50)
                     right_motor_1.set_velocity(50)
@@ -485,6 +496,7 @@ def mission():
                     left_motor_2.spin(FORWARD)
                     right_motor_1.spin(REVERSE)
                 else:
+                    global turn_thread
                     left_motor_1.stop()
                     left_motor_2.stop()
                     right_motor_1.stop()
@@ -497,6 +509,7 @@ def mission():
                     turn_thread = Thread(lambda: execute_threaded_turn(desiredInfo[0], 2500))
                     print("time to do your mom")
                     ROBERT = 1
+                    is_turning = True
 
         elif ROBERT == 1:
             print("currently doing your mom")
@@ -504,39 +517,24 @@ def mission():
                 ROBOT_STATE = APPROACHING
                 LAST_STATE = SEARCHING
         elif ROBERT == 0.5:
-            drive_task.update() # This is CRITICAL for the motors to move
+            drive_task.update()
             if drive_task.completed:
-                print("Backup complete. Searching again.")
                 ROBERT = 0
 
     elif ROBOT_STATE == APPROACHING:
         if LAST_STATE != APPROACHING:
             print(distance)
-            # if turning == True:
-            #     pass
-            # else:
             drive_task = PIDDrive(distance)
             LAST_STATE = APPROACHING
-        
-        # print(turning)
         if drive_task.completed:
-            # ROBOT_STATE = HARVESTING
             ROBOT_STATE = HARVESTING
-            # ROBERT = 0
             timer.reset()
-            # turning = True
-            # print("this is true")
-            # drive_task2 = PIDDrive(-5)
-        # elif drive_task.completed and turning == True:
-        #     timer.reset()
-        #     ROBOT_STATE = HARVESTING
         else: 
             drive_task.update()
 
     elif ROBOT_STATE == HARVESTING:
         if ROBERT == 1:
-            # del drive_task
-            drive_task = PIDDrive(-7)
+            drive_task = PIDDrive(-5)
             ROBERT = 2
         elif ROBERT == 2:
             claw.spin(FORWARD)
@@ -561,7 +559,6 @@ def mission():
         if ROBERT == 4:
             drive_task.update()
             if drive_task.completed:
-                # global heading
                 ROBOT_STATE = FIND_WALL
                 ROBERT = 5
                 timer.reset()
@@ -577,28 +574,47 @@ def mission():
             right_motor_1.spin(REVERSE)
             right_motor_2.spin(REVERSE)
             if timer.time() > 500:
-                distance_values.append(ultrasonic.distance(MM)*10)
-                angle_values.append(imu.rotation(DEGREES))
+                dist_cm = ultrasonic.distance(MM) / 10
+                if dist_cm > 0: 
+                    distance_values.append(dist_cm)
+                    angle_values.append(imu.rotation(DEGREES))
+
             if imu.rotation(DEGREES) >= heading + 360:
+                print("kill")
                 ROBERT = 6
+                for m in [left_motor_1, left_motor_2, right_motor_1, right_motor_2]:
+                    m.stop()
+
         if ROBERT == 6:
             desiredDistance = min(distance_values)
+            print(desiredDistance)
+            left_motor_1.stop()
+            left_motor_2.stop()
+            right_motor_1.stop()
+            right_motor_2.stop()
             min_index = distance_values.index(desiredDistance)
             desiredAngle = angle_values[min_index]
             turn_thread = Thread(lambda: execute_threaded_turn(desiredAngle + 180, 2500))
             ROBERT = 7
+            for m in [left_motor_1, left_motor_2, right_motor_1, right_motor_2]:
+                m.stop()
+                print("STOP MOVING")
+
+
         if ROBERT == 7:
             if not is_turning:
                 ROBERT = 8
                 drive_task = PIDDrive(desiredDistance)
+            else:
+                random += 1
         if ROBERT == 8:
             info = detectTree()
-            if info[0] == 0 and info[1] == 0:
-                drive_task.update()
-                if drive_task.completed:
-                    ROBERT = 11
-                    ROBOT_STATE = FIND_LINE
-            else:
+            # if info[0] == 0 and info[1] == 0:
+            drive_task.update()
+            if drive_task.completed:
+                ROBERT = 11
+                ROBOT_STATE = FIND_LINE
+            elif random == 69420:
                 ROBOT_STATE = PANIC
                 desiredAngle = info[0]
                 distance = info[1]
@@ -617,11 +633,11 @@ def mission():
 
     elif ROBOT_STATE == FIND_LINE:
         if ROBERT == 11:
-            drive_task = PIDDrive(67)
+            drive_task = PIDDrive(40)
             ROBERT = 12
         if ROBERT == 12:
             drive_task.update()
-            if button.pressed:
+            if button.pressing():
                 ROBERT = 13
         if ROBERT == 13:
             drive_task = PIDDrive(-6.7)
@@ -632,7 +648,7 @@ def mission():
                 ROBERT = 15
         if ROBERT == 15:
             currentHeading = imu.rotation(DEGREES)
-            turn_thread = Thread(lambda: execute_threaded_turn(currentHeading + 90, 2500))
+            turn_thread = Thread(lambda: execute_threaded_turn(currentHeading - 90, 2500))
             ROBERT = 16
         if ROBERT == 16:
             if not is_turning:
@@ -648,15 +664,18 @@ def mission():
                         if fieldPosition[1] == 0:
                             turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 180, 2500))
                         if fieldPosition[1] == 2:
-                            turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) - 90, 2500))
+                            turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 2500))
                             intersectionCount = 0
                     elif fieldPosition[0] == 1:
                         if fieldPosition[1]:
-                            turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) - 90, 2500))
+                            turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 2500))
                             intersectionCount = 0
     elif ROBOT_STATE == DELIVERING:
         if ROBERT == 18:
-            turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 3000))
+            for m in [left_motor_1, left_motor_2, right_motor_1, right_motor_2]:
+                m.stop()
+            turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 1500))
+            is_turning = True
             ROBERT = 19
         if ROBERT == 19:
             if not is_turning:
@@ -669,7 +688,7 @@ def mission():
         left_motor_2.spin(FORWARD)
         right_motor_1.spin(FORWARD)
         right_motor_2.spin(FORWARD)
-        if button.pressing:
+        if button.pressing():
             left_motor_1.stop()
             left_motor_2.stop()
             right_motor_1.stop()
@@ -681,7 +700,7 @@ def mission():
         elif turning == True:
             timer.reset()
             turning = False
-        elif timer.time() >= 2000:
+        elif timer.time() >= 5000:
                 ROBERT = 0
                 fruit_count = 0
                 intersectionCount = 0
@@ -691,10 +710,8 @@ def mission():
     else:
         print("67")
 
-# timer.reset()
 while True:
     mission()
-    # print(timer.time())
     if brain.timer.time(MSEC) % 500 < 20: 
         controller_1.screen.clear_screen()
         brain.screen.clear_screen()
@@ -705,7 +722,4 @@ while True:
         controller_1.screen.print("ROBERT: {:.2f}".format(ROBERT))
         controller_1.screen.next_row()
         controller_1.screen.print("HEADING: {:.2f}".format(imu.rotation(DEGREES)))
-    # brain.screen.print(ultrasonic.distance(MM))
-    # brain.screen.print("{:.2f}, {:.2f}".format(line_tracker_left.reflectivity(), line_tracker_right.reflectivity()))
-
     wait(20, MSEC)
