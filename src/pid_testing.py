@@ -357,6 +357,7 @@ def pidTurn(degrees, max_time_msec):
 
     motorPower = 0
     prevMotorPower = 0
+    timer.reset()
 
     while True:
         # get current rotation position
@@ -413,6 +414,7 @@ def pidTurn(degrees, max_time_msec):
         controller_1.screen.set_cursor(1,1)
         controller_1.screen.print(inertial_5.rotation(DEGREES))
         wait(20, MSEC)
+        print(timer.time())
 
     left_motor_1.stop()
     left_motor_2.stop()
