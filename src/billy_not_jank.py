@@ -24,7 +24,7 @@ april_vision = AiVision(Ports.PORT14, AiVision.ALL_TAGS)
 imu = Inertial(Ports.PORT6)
 claw = Motor(Ports.PORT19, GearSetting.RATIO_18_1, False)
 elevate_a = Motor(Ports.PORT17, GearSetting.RATIO_18_1, False)
-elevate_b = Motor(Ports.PORT18, GearSetting.RATIO_18_1, False)
+elevate_b = Motor(Ports.PORT18, GearSetting.RATIO_18_1, True)
 elevator = MotorGroup(elevate_a, elevate_b)
 flap = Motor(Ports.PORT15, GearSetting.RATIO_18_1, True)
 left_motor_1 = Motor(Ports.PORT21, GearSetting.RATIO_18_1, False)
@@ -65,6 +65,8 @@ controller_1_left_shoulder_control_motors_stopped = True
 controller_1_right_shoulder_control_motors_stopped = True
 drivetrain_l_needs_to_be_stopped_controller_1 = False
 drivetrain_r_needs_to_be_stopped_controller_1 = False
+
+remote_control_code_enabled = False
 
 # define a task that will handle monitoring inputs from controller_1
 def rc_auto_loop_function_controller_1():
@@ -146,9 +148,15 @@ def rc_auto_loop_function_controller_1():
 # remote_control_code_enabled = True
 
 rc_auto_loop_thread_controller_1 = Thread(rc_auto_loop_function_controller_1)
-
+buttonRightWasPressed = False
+buttonYWasPressed = False
+auton = True
 def rc_auto_loop_function_controller_2():
+    global auton
     global ROBERT
+    global currentRobert
+    global buttonRightWasPressed
+    global buttonYWasPressed
     global controller_1_right_shoulder_control_motors_stopped, remote_control_code_enabled
     # process the controller input every 20 milliseconds
     # update the motors based on the input values
@@ -156,18 +164,35 @@ def rc_auto_loop_function_controller_2():
         # check the buttonR1/buttonR2 status
         # to control motor_8
         if controller_1.buttonY.pressing():
+            if not buttonYWasPressed:
             # claw.spin(FORWARD)
-            ROBERT = -2
-        elif controller_1.buttonRight.pressing():
-            if remote_control_code_enabled == False:
-                remote_control_code_enabled = True
-            else:
-                remote_control_code_enabled = False
-            controller_1_right_shoulder_control_motors_stopped = False
-        elif controller_1.buttonLeft.pressing():
-            # set the toggle so that we don't constantly tell the motor to stop when
-            # the buttons are released
-            pass
+                ROBERT = -2
+                buttonYWasPressed = True
+        else:
+            buttonYWasPressed = False
+
+        if controller_1.buttonRight.pressing():
+            if not buttonRightWasPressed:
+                if remote_control_code_enabled == True:
+                    auton = True
+                    remote_control_code_enabled = False
+                    ROBERT = currentRobert
+                    buttonRightWasPressed = True
+                elif remote_control_code_enabled == False:
+                    auton = False
+                    remote_control_code_enabled = True
+                    buttonRightWasPressed = True
+        else:
+            buttonRightWasPressed = False
+
+        # elif not controller_1.buttonRight.pressing():
+        #     buttonRightWasPressed = False
+        # elif not controller_1.buttonY.pressing():
+        #     buttonYWasPressed = False
+        # elif controller_1.buttonLeft.pressing():
+        #     # set the toggle so that we don't constantly tell the motor to stop when
+        #     # the buttons are released
+        #     pass
             # controller_1_right_shoulder_control_motors_stopped = True
         # wait before repeating the process
         wait(20, MSEC)
@@ -542,16 +567,20 @@ def execute_threaded_turn(target_angle, timeout):
     global left_motor_1, left_motor_2, right_motor_1, right_motor_2
     global is_turning
     global cringe
+    global auton
     is_turning = True
     # Create the task locally so it has a fresh start_time
     task = PIDTurn(target_angle, timeout)
     
     # High-frequency loop dedicated ONLY to this turn
-    while not task.completed:
-        task.update()
-        wait(71, MSEC)
-        # print(DEBUG)
-    is_turning = False
+    if auton == False:
+        return
+    else:
+        while not task.completed:
+            task.update()
+            wait(71, MSEC)
+            # print(DEBUG)
+        is_turning = False
 
 dist = 0
 def detectFruit(currentFruit):
@@ -707,7 +736,9 @@ def line_roberting():
     return -1, -1
 
 ROBERT = -2
+currentRobert = ROBERT
 is_turning = False
+driveCount = 0
 fruit_count = 0
 distance_values = []
 angle_values = []
@@ -725,9 +756,13 @@ count = 0
 turn_task = PIDTurn(0, 0)
 drive_task = PIDDrive(0, False)
 swing_task = PIDSwing(0, False, False)
+second_count = 0
 swingHeading = 0
 def mission():
+    global driveCount
+    global second_count
     global count
+    global auton
     global flag
     global swingHeading
     global ROBOT_STATE
@@ -751,8 +786,19 @@ def mission():
     global turn_thread
     global is_turning
     global swing_task
+    global currentRobert
 
-    if ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
+    if auton == False:
+        if ROBERT != DOING_YA_MOM:
+            currentRobert = ROBERT
+            left_motor_1.stop()
+            left_motor_2.stop()
+            right_motor_1.stop()
+            right_motor_2.stop()
+            is_turning = False
+            ROBERT = DOING_YA_MOM
+
+    elif ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
         ROBOT_STATE = RAMP_DRIVE
         LAST_STATE = IDLE
     
@@ -773,14 +819,14 @@ def mission():
             if drive_task.completed:
                 ROBERT = 0
         elif ROBERT == 0:
-            target = imu.rotation(DEGREES) - 40
+            target = imu.rotation(DEGREES) - 38 #40
             is_turning = True
             turn_thread = Thread(lambda: execute_threaded_turn(target, 3000))
             ROBERT = 1
 
         elif ROBERT == 1:
             if not is_turning:
-                drive_task = PIDDrive(39.67 - count, False)
+                drive_task = PIDDrive(34 - second_count, False)
                 ROBERT = 2
 
         elif ROBERT == 2:
@@ -805,7 +851,7 @@ def mission():
         elif ROBERT == 3:
             # drive_task.update()
             # if drive_task.completed:
-            swing_task = PIDSwing(70, False, False) #67 or 70
+            swing_task = PIDSwing(74 + (count), False, False) #67 or 70
             ROBERT = 4
         elif ROBERT == 4:
             swing_task.update()
@@ -817,7 +863,7 @@ def mission():
                 # currentFruit = desiredInfo[2]
 
                 print(currentFruit)
-                drive_task = PIDDrive(24.67, True) #25
+                drive_task = PIDDrive(21 - driveCount, True) #25
                 ROBERT = 5
         elif ROBERT == 5:
             drive_task.update()
@@ -830,10 +876,16 @@ def mission():
                 claw.spin_to_position(0, DEGREES, False)
                 fruit_count += 1
                 ROBERT = 7
-                turn_thread = Thread(lambda: execute_threaded_turn(swingHeading + 87, 2500))
+                turn_thread = Thread(lambda: execute_threaded_turn(swingHeading + 90, 2500))
                 is_turning = True
                 timer.reset()
-                count += 3
+                count += 13
+                driveCount += 8
+                second_count += 8.5
+                if fruit_count == 2:
+                    second_count -= 4
+                    count -= 12
+                    driveCount = 17
         elif ROBERT == 7:
             if not is_turning:
                 # print("success")
