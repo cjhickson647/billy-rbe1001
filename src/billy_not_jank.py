@@ -36,6 +36,9 @@ button = Bumper(brain.three_wire_port.a)
 line_tracker_left = Line(brain.three_wire_port.h)
 line_tracker_right = Line(brain.three_wire_port.f)
 ultrasonic = Sonar(brain.three_wire_port.c)
+left_drive_smart = MotorGroup(left_motor_1, left_motor_2)
+right_drive_smart = MotorGroup(right_motor_1, right_motor_2)
+drivetrain = DriveTrain(left_drive_smart, right_drive_smart, 319.19, 295, 40, MM, 1.6666666666666667)
 
 
 # wait for rotation sensor to fully initialize
@@ -56,21 +59,79 @@ wait(200, MSEC)
 print("\033[2J")
 
 # define variables used for controlling motors based on controller inputs
+
+# define a task that will handle monitoring inputs from controller_1
+controller_1_left_shoulder_control_motors_stopped = True
 controller_1_right_shoulder_control_motors_stopped = True
+drivetrain_l_needs_to_be_stopped_controller_1 = False
+drivetrain_r_needs_to_be_stopped_controller_1 = False
 
 # define a task that will handle monitoring inputs from controller_1
 def rc_auto_loop_function_controller_1():
-    global controller_1_right_shoulder_control_motors_stopped, remote_control_code_enabled
+    global drivetrain_l_needs_to_be_stopped_controller_1, drivetrain_r_needs_to_be_stopped_controller_1, controller_1_left_shoulder_control_motors_stopped, controller_1_right_shoulder_control_motors_stopped, remote_control_code_enabled
     # process the controller input every 20 milliseconds
     # update the motors based on the input values
     while True:
         if remote_control_code_enabled:
+            
+            # calculate the drivetrain motor velocities from the controller joystick axies
+            # left = axis3 + axis1
+            # right = axis3 - axis1
+            drivetrain_left_side_speed = controller_1.axis3.position() + controller_1.axis1.position()
+            drivetrain_right_side_speed = controller_1.axis3.position() - controller_1.axis1.position()
+            
+            # check if the value is inside of the deadband range
+            if drivetrain_left_side_speed < 5 and drivetrain_left_side_speed > -5:
+                # check if the left motor has already been stopped
+                if drivetrain_l_needs_to_be_stopped_controller_1:
+                    # stop the left drive motor
+                    left_drive_smart.stop()
+                    # tell the code that the left motor has been stopped
+                    drivetrain_l_needs_to_be_stopped_controller_1 = False
+            else:
+                # reset the toggle so that the deadband code knows to stop the left motor next
+                # time the input is in the deadband range
+                drivetrain_l_needs_to_be_stopped_controller_1 = True
+            # check if the value is inside of the deadband range
+            if drivetrain_right_side_speed < 5 and drivetrain_right_side_speed > -5:
+                # check if the right motor has already been stopped
+                if drivetrain_r_needs_to_be_stopped_controller_1:
+                    # stop the right drive motor
+                    right_drive_smart.stop()
+                    # tell the code that the right motor has been stopped
+                    drivetrain_r_needs_to_be_stopped_controller_1 = False
+            else:
+                # reset the toggle so that the deadband code knows to stop the right motor next
+                # time the input is in the deadband range
+                drivetrain_r_needs_to_be_stopped_controller_1 = True
+            
+            # only tell the left drive motor to spin if the values are not in the deadband range
+            if drivetrain_l_needs_to_be_stopped_controller_1:
+                left_drive_smart.set_velocity(drivetrain_left_side_speed, PERCENT)
+                left_drive_smart.spin(FORWARD)
+            # only tell the right drive motor to spin if the values are not in the deadband range
+            if drivetrain_r_needs_to_be_stopped_controller_1:
+                right_drive_smart.set_velocity(drivetrain_right_side_speed, PERCENT)
+                right_drive_smart.spin(FORWARD)
+            # check the buttonL1/buttonL2 status
+            # to control elevator
+            if controller_1.buttonL1.pressing():
+                elevator.spin(FORWARD)
+                controller_1_left_shoulder_control_motors_stopped = False
+            elif controller_1.buttonL2.pressing():
+                elevator.spin(REVERSE)
+                controller_1_left_shoulder_control_motors_stopped = False
+            elif not controller_1_left_shoulder_control_motors_stopped:
+                elevator.stop()
+                # set the toggle so that we don't constantly tell the motor to stop when
+                # the buttons are released
+                controller_1_left_shoulder_control_motors_stopped = True
             # check the buttonR1/buttonR2 status
-            # to control motor_8
-            if controller_1.buttonY.pressing():
+            # to control claw
+            if controller_1.buttonR1.pressing():
                 claw.spin(FORWARD)
                 controller_1_right_shoulder_control_motors_stopped = False
-            elif controller_1.buttonX.pressing():
+            elif controller_1.buttonR2.pressing():
                 claw.spin(REVERSE)
                 controller_1_right_shoulder_control_motors_stopped = False
             elif not controller_1_right_shoulder_control_motors_stopped:
@@ -82,8 +143,37 @@ def rc_auto_loop_function_controller_1():
         wait(20, MSEC)
 
 # define variable for remote controller enable/disable
-remote_control_code_enabled = True
+# remote_control_code_enabled = True
+
 rc_auto_loop_thread_controller_1 = Thread(rc_auto_loop_function_controller_1)
+
+def rc_auto_loop_function_controller_2():
+    global ROBERT
+    global controller_1_right_shoulder_control_motors_stopped, remote_control_code_enabled
+    # process the controller input every 20 milliseconds
+    # update the motors based on the input values
+    while True:
+        # check the buttonR1/buttonR2 status
+        # to control motor_8
+        if controller_1.buttonY.pressing():
+            # claw.spin(FORWARD)
+            ROBERT = -2
+        elif controller_1.buttonRight.pressing():
+            if remote_control_code_enabled == False:
+                remote_control_code_enabled = True
+            else:
+                remote_control_code_enabled = False
+            controller_1_right_shoulder_control_motors_stopped = False
+        elif controller_1.buttonLeft.pressing():
+            # set the toggle so that we don't constantly tell the motor to stop when
+            # the buttons are released
+            pass
+            # controller_1_right_shoulder_control_motors_stopped = True
+        # wait before repeating the process
+        wait(20, MSEC)
+
+# define variable for remote controller enable/disable
+rc_auto_loop_thread_controller_2 = Thread(rc_auto_loop_function_controller_2)
 
 #endregion VEXcode Generated Robot Configuration
 
@@ -178,7 +268,8 @@ class PIDDrive:
         self.completed = False
 
     def update(self):
-        # calc logic
+        # calc logic\
+        global currentFruit
         if self.completed:
             return
 
@@ -195,11 +286,16 @@ class PIDDrive:
 
         # Heading and Slew logic
         currentAngle = imu.rotation(DEGREES)
-        temp = detectFruit()
-        if heading:
-            headingCorrect = (temp[0] - currentAngle) * self.kP_steer
-        else:
-            headingCorrect = 0
+        temp = detectFruit(currentFruit)
+
+        headingCorrect = 0
+
+        if self.heading:
+            currentAngle = imu.rotation(DEGREES)
+            temp = detectFruit(currentFruit)
+
+            if temp[0] != 0:
+                headingCorrect = (temp[0] - currentAngle) * self.kP_steer
         
         # Normalize and Slew
         self.motorPower = max(-1, min(1, self.motorPower))
@@ -391,11 +487,15 @@ class PIDSwing:
 
         # Heading and Slew logic
         currentAngle = imu.rotation(DEGREES)
-        temp = detectFruit()
-        if heading:
-            headingCorrect = (temp[0] - currentAngle) * self.kP_steer
-        else:
-            headingCorrect = 0
+        temp = detectFruit(currentFruit)
+        headingCorrect = 0
+
+        if self.heading:
+            currentAngle = imu.rotation(DEGREES)
+            temp = detectFruit(currentFruit)
+            
+            if temp[0] != 0:
+                headingCorrect = (temp[0] - currentAngle) * self.kP_steer
         
         # Normalize and Slew
         self.motorPower = max(-1, min(1, self.motorPower))
@@ -454,7 +554,7 @@ def execute_threaded_turn(target_angle, timeout):
     is_turning = False
 
 dist = 0
-def detectFruit():
+def detectFruit(currentFruit):
     global dist
     objects = [
         {"type": 20, "snap": fruit_vision.take_snapshot(fruit__apricot)},
@@ -489,13 +589,13 @@ def detectFruit():
     desiredAngle = math.atan2(xDistance, target["distance"]) * (180 / math.pi)
     
     # Return angle, distance with padding, and the fruit ID
-    if target["type"] == 20:
+    if currentFruit == 20:
         # desiredAngle = math.atan2(xDistance, target["distance"] - (CAMERA_DIFF/2)) * (180 / math.pi)
         return desiredAngle + imu.rotation(DEGREES) - 7.6, target["distance"] - CAMERA_DIFF, target["type"]
-    elif target["type"] == 22:
+    elif currentFruit == 22:
         # desiredAngle = math.atan2(xDistance, target["distance"] - (CAMERA_DIFF/2)) * (180 / math.pi)
         return desiredAngle + imu.rotation(DEGREES) - 7.4, target["distance"] - (CAMERA_DIFF), target["type"]
-    elif target["type"] == 23:
+    elif currentFruit == 23:
         # desiredAngle = math.atan2(xDistance, target["distance"] - (CAMERA_DIFF / 2)) * (180 / math.pi)
         return desiredAngle + imu.rotation(DEGREES) - 7.6, target["distance"] - (CAMERA_DIFF), target["type"]
     else:
@@ -589,12 +689,14 @@ def line_roberting():
     
     if (right_reflectivity > intersection_reflectivity) and (left_reflectivity > intersection_reflectivity):
         # do intersection stuff
-        if ultrasonic.distance(MM) > 2200:
-            intersectionCount += 1
-            return 0, intersectionCount
-        
-        elif ultrasonic.distance(MM) < 2200:
-            return 1, -1
+        if controller_1.buttonA.pressing():
+            return 1
+        elif controller_1.buttonB.pressing():
+            return 2
+        elif controller_1.buttonX.pressing():
+            return 3
+        else:
+            return 0
 
     else:
         left_motor_1.spin(REVERSE, base_speed - turning_effort, RPM)
@@ -619,11 +721,13 @@ currentFruit = 0
 DEBUG = -674206921426767
 ROBOT_STATE = DEBUG
 flag = False
+count = 0
 turn_task = PIDTurn(0, 0)
 drive_task = PIDDrive(0, False)
 swing_task = PIDSwing(0, False, False)
 swingHeading = 0
 def mission():
+    global count
     global flag
     global swingHeading
     global ROBOT_STATE
@@ -654,6 +758,7 @@ def mission():
     
     elif ROBOT_STATE == DEBUG:
         # temporary()
+        currentFruit = 22
         global turn_thread
         global ROBERT
         # global drive_task
@@ -668,34 +773,51 @@ def mission():
             if drive_task.completed:
                 ROBERT = 0
         elif ROBERT == 0:
-            x = 38
-            turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 40, 2500))
+            target = imu.rotation(DEGREES) - 40
             is_turning = True
+            turn_thread = Thread(lambda: execute_threaded_turn(target, 3000))
             ROBERT = 1
-            drive_task = PIDDrive(8.2, False)
+
         elif ROBERT == 1:
             if not is_turning:
-                drive_task.update()
-                if drive_task.completed:
-                    ROBERT = 2
-            pass
+                drive_task = PIDDrive(39.67 - count, False)
+                ROBERT = 2
+
         elif ROBERT == 2:
-            drive_task = PIDDrive(38/2, False)
-            ROBERT = 3
-        elif ROBERT == 3:
             drive_task.update()
             if drive_task.completed:
-                swing_task = PIDSwing(67, True, True)
-                ROBERT = 4
+                ROBERT = 3
+        # elif ROBERT == 0:
+        #     x = 38
+        #     turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) - 40, 3000))
+        #     is_turning = True
+        #     ROBERT = 1
+        #     drive_task = PIDDrive(20.67 + 19, False) #8.2
+        # elif ROBERT == 1:
+        #     if not is_turning:
+        #         drive_task.update()
+        #         if drive_task.completed:
+        #             ROBERT = 2
+        #     pass
+        # elif ROBERT == 2:
+        #     # drive_task = PIDDrive(38/2, False)
+        #     ROBERT = 3
+        elif ROBERT == 3:
+            # drive_task.update()
+            # if drive_task.completed:
+            swing_task = PIDSwing(70, False, False) #67 or 70
+            ROBERT = 4
         elif ROBERT == 4:
             swing_task.update()
             if swing_task.completed:
-                desiredInfo = detectFruit()
+                desiredInfo = detectFruit(currentFruit)
                 print(desiredInfo[0])
                 print(desiredInfo[1])
                 distance = desiredInfo[1]
-                currentFruit = desiredInfo[2]
-                drive_task = PIDDrive(distance*0.80, True)
+                # currentFruit = desiredInfo[2]
+
+                print(currentFruit)
+                drive_task = PIDDrive(24.67, True) #25
                 ROBERT = 5
         elif ROBERT == 5:
             drive_task.update()
@@ -708,12 +830,14 @@ def mission():
                 claw.spin_to_position(0, DEGREES, False)
                 fruit_count += 1
                 ROBERT = 7
-                turn_thread = Thread(lambda: execute_threaded_turn(swingHeading - 87, 2500))
+                turn_thread = Thread(lambda: execute_threaded_turn(swingHeading + 87, 2500))
                 is_turning = True
                 timer.reset()
+                count += 3
         elif ROBERT == 7:
             if not is_turning:
-                print("success")
+                # print("success")
+                pass
             else:
                 pass
         #     if timer.time() > 2500:
@@ -762,7 +886,7 @@ def mission():
     elif ROBOT_STATE == SEARCHING:
         if ROBERT == 0:
             global turn_thread
-            desiredInfo = detectFruit()
+            desiredInfo = detectFruit(currentFruit)
             if desiredInfo[0] == 0 and desiredInfo[1] == 0:
                 left_motor_1.set_velocity(50)
                 left_motor_2.set_velocity(50)
@@ -970,16 +1094,27 @@ def mission():
             else:
                 if not is_turning:
                     fieldPosition = line_roberting()
-                    if fieldPosition[0] == 0:
-                        if fieldPosition[1] == 0:
-                            turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 180, 2500))
-                        if fieldPosition[1] == 2:
-                            turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 2500))
-                            intersectionCount = 0
-                    elif fieldPosition[0] == 1:
-                        if fieldPosition[1]:
-                            turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 2500))
-                            intersectionCount = 0
+                    if fieldPosition == 1:
+                        turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 2500))
+                        is_turning = True
+                    elif fieldPosition == 2:
+                        turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) - 90, 2500))
+                        is_turning = True
+                    elif fieldPosition == 3:
+                        turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 180, 2500))
+                        is_turning = True
+                    else:
+                        pass
+                    # if fieldPosition[0] == 0:
+                    #     if fieldPosition[1] == 0:
+                    #         turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 180, 2500))
+                    #     if fieldPosition[1] == 2:
+                    #         turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 2500))
+                    #         intersectionCount = 0
+                    # elif fieldPosition[0] == 1:
+                    #     if fieldPosition[1]:
+                    #         turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 2500))
+                    #         intersectionCount = 0
     elif ROBOT_STATE == DELIVERING:
         if ROBERT == 18:
             for m in [left_motor_1, left_motor_2, right_motor_1, right_motor_2]:
