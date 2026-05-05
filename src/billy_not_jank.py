@@ -585,22 +585,25 @@ def execute_threaded_turn(target_angle, timeout):
 dist = 0
 def detectFruit(currentFruit):
     global dist
+
     objects = [
         {"type": 20, "snap": fruit_vision.take_snapshot(fruit__apricot)},
         {"type": 22, "snap": fruit_vision.take_snapshot(fruit__lime)},
         {"type": 23, "snap": fruit_vision.take_snapshot(fruit__grape)}
     ]
 
-    Y_THRESHOLD = 80 
     detected_list = []
 
     for item in objects:
         snap = item["snap"]
-        if snap and len(snap) > 0 and snap[0].score > 80: # and snap[0].centerY > Y_THRESHOLD:
-            # Use the consistent 3-inch height you calibrated
+
+        if snap and len(snap) > 0 and snap[0].score > 80:
+            # If currentFruit is set, only accept that fruit type
+            if currentFruit != 0 and item["type"] != currentFruit:
+                continue
+
             dist = FRUIT_HEIGHT / (snap[0].height * CAMERA_RATIO)
-            
-            # Store the data so we can compare them
+
             detected_list.append({
                 "type": item["type"],
                 "distance": dist,
@@ -610,25 +613,25 @@ def detectFruit(currentFruit):
 
     if detected_list == []:
         return 0, 0, 0
-    
+
+    # closest valid fruit
     detected_list.sort(key=lambda x: x["distance"])
     target = detected_list[0]
 
     xDistance = (target["centerX"] - 160) * target["distance"] * CAMERA_RATIO
     desiredAngle = math.atan2(xDistance, target["distance"]) * (180 / math.pi)
-    
-    # Return angle, distance with padding, and the fruit ID
-    if currentFruit == 20:
-        # desiredAngle = math.atan2(xDistance, target["distance"] - (CAMERA_DIFF/2)) * (180 / math.pi)
-        return desiredAngle + imu.rotation(DEGREES) - 7.6, target["distance"] - CAMERA_DIFF, target["type"]
-    elif currentFruit == 22:
-        # desiredAngle = math.atan2(xDistance, target["distance"] - (CAMERA_DIFF/2)) * (180 / math.pi)
-        return desiredAngle + imu.rotation(DEGREES) - 7.4, target["distance"] - (CAMERA_DIFF), target["type"]
-    elif currentFruit == 23:
-        # desiredAngle = math.atan2(xDistance, target["distance"] - (CAMERA_DIFF / 2)) * (180 / math.pi)
-        return desiredAngle + imu.rotation(DEGREES) - 7.6, target["distance"] - (CAMERA_DIFF), target["type"]
+
+    # Pick offset based on the ACTUAL target type, not currentFruit
+    if target["type"] == 20:
+        offset = -7.6
+    elif target["type"] == 22:
+        offset = -7.4
+    elif target["type"] == 23:
+        offset = -7.6
     else:
-        return 0, 0, 0
+        offset = 0
+
+    return desiredAngle + imu.rotation(DEGREES) + offset, target["distance"] - CAMERA_DIFF, target["type"]
 
 def get_angle_diff(current, target):
     current_norm = current % 360
@@ -803,21 +806,23 @@ def mission():
         LAST_STATE = IDLE
     
     elif ROBOT_STATE == DEBUG:
-        # temporary()
         currentFruit = 22
         global turn_thread
         global ROBERT
-        # global drive_task
         global is_turning
         global swingHeading
         if ROBERT == -2:
             drive_task = PIDDrive(-8, False)
             swingHeading = imu.rotation(DEGREES)
             ROBERT = -1
+            claw.spin(FORWARD)
+            timer.reset()
         elif ROBERT == -1:
-            drive_task.update()
-            if drive_task.completed:
-                ROBERT = 0
+            if timer.time() >= 2500:
+                drive_task.update()
+                if drive_task.completed:
+                    ROBERT = 0
+                    claw.spin_to_position(0, DEGREES, False)
         elif ROBERT == 0:
             target = imu.rotation(DEGREES) - 38 #40
             is_turning = True
@@ -833,24 +838,8 @@ def mission():
             drive_task.update()
             if drive_task.completed:
                 ROBERT = 3
-        # elif ROBERT == 0:
-        #     x = 38
-        #     turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) - 40, 3000))
-        #     is_turning = True
-        #     ROBERT = 1
-        #     drive_task = PIDDrive(20.67 + 19, False) #8.2
-        # elif ROBERT == 1:
-        #     if not is_turning:
-        #         drive_task.update()
-        #         if drive_task.completed:
-        #             ROBERT = 2
-        #     pass
-        # elif ROBERT == 2:
-        #     # drive_task = PIDDrive(38/2, False)
-        #     ROBERT = 3
+        
         elif ROBERT == 3:
-            # drive_task.update()
-            # if drive_task.completed:
             swing_task = PIDSwing(74 + (count), False, False) #67 or 70
             ROBERT = 4
         elif ROBERT == 4:
@@ -860,71 +849,41 @@ def mission():
                 print(desiredInfo[0])
                 print(desiredInfo[1])
                 distance = desiredInfo[1]
-                # currentFruit = desiredInfo[2]
-
                 print(currentFruit)
                 drive_task = PIDDrive(21 - driveCount, True) #25
                 ROBERT = 5
         elif ROBERT == 5:
             drive_task.update()
             if drive_task.completed:
-                claw.spin(FORWARD)
+                # claw.spin(FORWARD)
                 ROBERT = 6
-                timer.reset()
+                # timer.reset()
         elif ROBERT == 6:
-            if timer.time() >= 2000 and ROBERT != 7: # drive backwards
-                claw.spin_to_position(0, DEGREES, False)
-                fruit_count += 1
-                ROBERT = 7
-                turn_thread = Thread(lambda: execute_threaded_turn(swingHeading + 90, 2500))
-                is_turning = True
-                timer.reset()
-                count += 13
-                driveCount += 8
-                second_count += 8.5
-                if fruit_count == 2:
-                    second_count -= 4
-                    count -= 12
-                    driveCount = 17
+            # if timer.time() >= 2000 and ROBERT != 7: # drive backwards
+            #     # claw.spin_to_position(0, DEGREES, False)
+            fruit_count += 1
+            # ROBERT = 7
+            turn_thread = Thread(lambda: execute_threaded_turn(swingHeading + 90, 2500))
+            is_turning = True
+            timer.reset()
+            count += 13
+            driveCount += 8
+            second_count += 8.5
+            if fruit_count == 2:
+                second_count -= 4
+                count -= 12
+                driveCount = 17
+                ROBERT = -2
+            elif fruit_count == 3:
+                ROBOT_STATE = AVOID_DANGER
+                ROBERT = 3
+
         elif ROBERT == 7:
             if not is_turning:
                 # print("success")
                 pass
             else:
                 pass
-        #     if timer.time() > 2500:
-        #         drive_task.update()
-        # elif ROBERT == 2.5:
-        #         if timer.time() >= 1000:
-        #             if fruit_count == 4:
-        #                 ROBOT_STATE = AVOID_DANGER
-        #                 ROBERT = 3
-        #             else:
-        #                 ROBOT_STATE = SEARCHING
-        #                 ROBERT = 0
-        #                 turning = False
-
-            
-        # if ROBERT == 0:
-        #     desiredInfo = detectFruit()
-        #     print(desiredInfo[0])
-        #     print(desiredInfo[1])
-        #     distance = desiredInfo[1]
-        #     currentFruit = desiredInfo[2]
-        #     print(desiredInfo[2])
-        #     turn_thread = Thread(lambda: execute_threaded_turn(desiredInfo[0], 2500))
-        #     ROBERT = 1
-        #     is_turning = True
-        # elif ROBERT == 1:
-        #     if not is_turning:
-        #         drive_task = PIDDrive(distance, True)
-        #         ROBERT = 2
-        #     pass
-        # elif ROBERT == 2:
-        #     drive_task.update()
-        # if ROBERT == 0:
-        #     flap.spin_to_position(276, DEGREES, False)
-        #     ROBERT = 1
         
     elif ROBOT_STATE == RAMP_DRIVE:
         if LAST_STATE != RAMP_DRIVE:
@@ -963,7 +922,7 @@ def mission():
                     left_motor_2.stop()
                     right_motor_1.stop()
                     right_motor_2.stop()
-                    # desiredInfo = detectFruit()
+                    desiredInfo = detectFruit(67)
                     print(desiredInfo[0])
                     print(desiredInfo[1])
                     distance = desiredInfo[1]
@@ -990,40 +949,37 @@ def mission():
             drive_task = PIDDrive(distance, True)
             LAST_STATE = APPROACHING
         if drive_task.completed:
-            # if flag == False:
-            #     # print(flag)
-            #     ROBOT_STATE = SEARCHING
-            #     ROBERT = 0
-            #     flag = True
-            # elif flag == True:
             ROBOT_STATE = HARVESTING
             timer.reset()
         else: 
             drive_task.update()
 
     elif ROBOT_STATE == HARVESTING:
+        # HERE
         if ROBERT == 1:
-            drive_task = PIDDrive(-8, False)
-            ROBERT = 2
-        elif ROBERT == 2:
-            claw.spin(FORWARD)
-            if drive_task.completed:
-                print("your mom")
-                claw.spin_to_position(0, DEGREES, False)
-                fruit_count += 1
-                ROBERT = 2.5
-                timer.reset()
-            if timer.time() > 2500:
-                drive_task.update()
-        elif ROBERT == 2.5:
-            if timer.time() >= 1000:
-                if fruit_count == 4:
-                    ROBOT_STATE = AVOID_DANGER
-                    ROBERT = 3
-                else:
-                    ROBOT_STATE = SEARCHING
-                    ROBERT = 0
-                    turning = False
+            ROBERT = -2
+            ROBOT_STATE = DEBUG
+            # drive_task = PIDDrive(-8, False)
+            # ROBERT = 2
+        # elif ROBERT == 2:
+        #     claw.spin(FORWARD)
+        #     if drive_task.completed:
+        #         print("your mom")
+        #         claw.spin_to_position(0, DEGREES, False)
+        #         fruit_count += 1
+        #         ROBERT = 2.5
+        #         timer.reset()
+        #     if timer.time() > 2500:
+        #         drive_task.update()
+        # elif ROBERT == 2.5:
+        #     if timer.time() >= 1000:
+        #         if fruit_count == 4:
+        #             ROBOT_STATE = AVOID_DANGER
+        #             ROBERT = 3
+        #         else:
+        #             ROBOT_STATE = SEARCHING
+        #             ROBERT = 0
+        #             turning = False
 
     elif ROBOT_STATE == AVOID_DANGER:
         if ROBERT == 3:
