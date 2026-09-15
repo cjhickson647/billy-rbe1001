@@ -11,12 +11,8 @@ brain=Brain()
 controller_1 = Controller(PRIMARY)
 # AI Vision Color Descriptions
 # AI Vision Code Descriptions
-# fruit__apricot = Colordesc(1, 233, 77, 81, 10, 0.19)
-# fruit__apricot = Colordesc(1, 233, 112, 103, 15.67, 0.21)
 fruit__apricot = Colordesc(1, 228, 64, 65, 15, 0.21)
-# fruit__lime = Colordesc(2, 91, 255, 144, 9, 0.21)
 fruit__lime = Colordesc(2, 53, 251, 108, 15, 0.23)
-# fruit__grape = Colordesc(3, 146, 89, 195, 10, 0.2)
 fruit__grape = Colordesc(3, 165, 119, 202, 40, 0.21)
 fruit__tree = Colordesc(4, 121, 163, 160, 40, 0.1)
 fruit_vision = AiVision(Ports.PORT16, fruit__apricot, fruit__lime, fruit__grape, fruit__tree)
@@ -155,8 +151,8 @@ buttonAWasPressed = False
 auton = True
 def rc_auto_loop_function_controller_2():
     global auton
-    global ROBERT
-    global currentRobert
+    global SUBSTATE
+    global currentSubstate
     global buttonRightWasPressed
     global buttonAWasPressed
     global buttonXWasPressed
@@ -170,8 +166,6 @@ def rc_auto_loop_function_controller_2():
         # to control motor_8
         if controller_1.buttonY.pressing():
             if not buttonYWasPressed:
-            # claw.spin(FORWARD)
-                # ROBERT = -2
                 intersection = 1
                 buttonYWasPressed = True
         else:
@@ -179,8 +173,6 @@ def rc_auto_loop_function_controller_2():
 
         if controller_1.buttonX.pressing():
             if not buttonXWasPressed:
-            # claw.spin(FORWARD)
-                # ROBERT = -2
                 intersection = 2
                 buttonXWasPressed = True
         else:
@@ -188,8 +180,6 @@ def rc_auto_loop_function_controller_2():
 
         if controller_1.buttonA.pressing():
             if not buttonAWasPressed:
-            # claw.spin(FORWARD)
-                # ROBERT = -2
                 intersection = 3
                 buttonAWasPressed = True
         else:
@@ -200,7 +190,7 @@ def rc_auto_loop_function_controller_2():
                 if remote_control_code_enabled == True:
                     auton = True
                     remote_control_code_enabled = False
-                    ROBERT = currentRobert
+                    SUBSTATE = currentSubstate
                     buttonRightWasPressed = True
                 elif remote_control_code_enabled == False:
                     auton = False
@@ -258,10 +248,10 @@ DEBUG = 420
 ROBOT_STATE = IDLE
 LAST_STATE = -1
 
-# this might be confusing, but we use the variable ROBERT
+# SUBSTATE is a mini state machine within the greater state machine
 # to control how we execute different steps within our state machine
-ROBERT = 0
-currentRobert = ROBERT
+SUBSTATE = 0
+currentSubstate = SUBSTATE
 is_turning = False
 driveCount = 0 # drive count is how much we drive to the fruit in FRUIT_NAVIGATION
 fruit_count = 0
@@ -636,7 +626,6 @@ class PIDSwing:
 def execute_threaded_turn(target_angle, timeout):
     global left_motor_1, left_motor_2, right_motor_1, right_motor_2
     global is_turning
-    global cringe
     global auton
     is_turning = True
     # Create the task locally so it has a fresh start_time
@@ -728,38 +717,22 @@ def wallTag():
     desiredAngle = math.atan2(xDistance, dist) * (180 / math.pi)
     return  desiredAngle + imu.rotation(DEGREES) + 90, 67, object1[0].id
 
-# detectTree()
-# this is an unused function, but it basically tries to detect the white of the tree
-# to turn away from the tree and avoid it when it is trying to go to a wall
-def detectTree():
-    object1 = fruit_vision.take_snapshot(fruit__tree)
-    if object1[0].exists:
-        distance = FRUIT_HEIGHT / (object1[0].height * CAMERA_RATIO)
-        xDistance = (object1[0].centerX - 160) * distance * CAMERA_RATIO
-        desiredAngle = math.atan2(xDistance, distance) * (180 / math.pi)
-        if object1[0].score > 80:
-            return desiredAngle + imu.rotation(DEGREES), distance - CAMERA_DIFF
-        else:
-            return 0,0
-    else:
-        return 0,0
-
-# PID stuff for line_roberting()
+# PID stuff for line_following()
 Kp = 0.35
 Kd = 4
 intersectionCount = 0
 lastError = 0
 
-# line_roberting()
+# line_following()
 # this function is our line following function which has kP and kD
 # this allows our 4 wheel drive to line follow accurately
 # also depending on what button we press, it will choose which way
 # it turns at an intersection
-def line_roberting():
+def line_following():
     global intersectionCount
     global intersection
     global lastError
-    # robert is doing the line
+
     right_reflectivity = line_tracker_left.reflectivity()
     left_reflectivity = line_tracker_right.reflectivity()
     print(right_reflectivity, left_reflectivity)
@@ -798,14 +771,12 @@ def mission():
     global auton
     global swingHeading
     global ROBOT_STATE
-    global cringe
     global LAST_STATE
-    random  = 1
     global drive_task
     global drive_task2
     global turn_task
     global fruit_count
-    global ROBERT
+    global SUBSTATE
     global distance_values
     global angle_values
     global heading
@@ -818,18 +789,18 @@ def mission():
     global turn_thread
     global is_turning
     global swing_task
-    global currentRobert
+    global currentSubstate
 
     # this is to pause the state machine if I enable driver control to fix something
     if auton == False:
-        if ROBERT != AUTO_RESET:
-            currentRobert = ROBERT
+        if SUBSTATE != AUTO_RESET:
+            currentSubstate = SUBSTATE
             left_motor_1.stop()
             left_motor_2.stop()
             right_motor_1.stop()
             right_motor_2.stop()
             is_turning = False
-            ROBERT = AUTO_RESET
+            SUBSTATE = AUTO_RESET
 
     # this is our starting state, which transitions to RAMP_DRIVE if I hold the button down
     elif ROBOT_STATE == IDLE and controller_1.buttonL1.pressing():
@@ -838,54 +809,54 @@ def mission():
     
     # debug state, we put any code here and just test it when we need to
     elif ROBOT_STATE == DEBUG:
-        temp = line_roberting()
+        temp = line_following()
     
     # fruit navigation, this is where we start at a fruit, and 
     # turn-drive-swing-drive to get the next fruit on the tree
     # one thing to clarify, making the instance of any PID class needs to be called only once,
-    # so you will see a lot of making the instance and then changing the ROBERT and then on the next
-    # ROBERT we call the update function for that class to start the PID calculations and movement
+    # so you will see a lot of making the instance and then changing the SUBSTATE and then on the next
+    # SUBSTATE we call the update function for that class to start the PID calculations and movement
     elif ROBOT_STATE == FRUIT_NAVIGATION:
         global turn_thread
-        global ROBERT
+        global SUBSTATE
         global is_turning
         global swingHeading
-        if ROBERT == -2:
+        if SUBSTATE == -2:
             drive_task = PIDDrive(-8, False)
             swingHeading = imu.rotation(DEGREES)
-            ROBERT = -1
+            SUBSTATE = -1
             claw.spin(FORWARD)
             timer.reset()
-        elif ROBERT == -1:
+        elif SUBSTATE == -1:
             if timer.time() >= 2500:
                 drive_task.update()
                 if drive_task.completed:
-                    ROBERT = 0
+                    SUBSTATE = 0
                     if currentFruit == 3:
                         claw.stop()
-                        ROBERT = 7
+                        SUBSTATE = 7
                     else:
                         claw.spin_to_position(0, DEGREES, False)
-        elif ROBERT == 0:
+        elif SUBSTATE == 0:
             target = imu.rotation(DEGREES) - 38 #40
             is_turning = True
             turn_thread = Thread(lambda: execute_threaded_turn(target, 3000))
-            ROBERT = 1
+            SUBSTATE = 1
 
-        elif ROBERT == 1:
+        elif SUBSTATE == 1:
             if not is_turning:
                 drive_task = PIDDrive(34 - second_count, False)
-                ROBERT = 2
+                SUBSTATE = 2
 
-        elif ROBERT == 2:
+        elif SUBSTATE == 2:
             drive_task.update()
             if drive_task.completed:
-                ROBERT = 3
+                SUBSTATE = 3
         
-        elif ROBERT == 3:
+        elif SUBSTATE == 3:
             swing_task = PIDSwing(74 + (count), False, False) #67 or 70
-            ROBERT = 4
-        elif ROBERT == 4:
+            SUBSTATE = 4
+        elif SUBSTATE == 4:
             swing_task.update()
             if swing_task.completed:
                 desiredInfo = detectFruit(currentFruit)
@@ -894,66 +865,60 @@ def mission():
                 distance = desiredInfo[1]
                 print(currentFruit)
                 drive_task = PIDDrive(21 - driveCount, True) #25
-                ROBERT = 5
-        elif ROBERT == 5:
+                SUBSTATE = 5
+        elif SUBSTATE == 5:
             drive_task.update()
             if drive_task.completed:
-                # claw.spin(FORWARD)
-                ROBERT = 6
-                # timer.reset()
-        elif ROBERT == 6:
+                SUBSTATE = 6
+        elif SUBSTATE == 6:
             fruit_count += 1
             turn_thread = Thread(lambda: execute_threaded_turn(swingHeading + 90, 2500))
             is_turning = True
             timer.reset()
-            # print("first")
             if fruit_count == 2:
-                # print("second")
                 count += 13
                 driveCount += 8
                 second_count += 8.5
             elif fruit_count == 3:
-                # print("third")
                 second_count -= 4
                 count -= 12
                 driveCount = 17
-                ROBERT = -2
+                SUBSTATE = -2
             elif fruit_count == 4:
-                ROBERT = 7
+                SUBSTATE = 7
                 drive_task = PIDDrive(6.7, False)
 
-        elif ROBERT == 7:
+        elif SUBSTATE == 7:
             drive_task.update()
             if drive_task.completed:
                 claw.spin(FORWARD)
                 if timer.time() >= 3000:
-                    # claw.stop()
                     ROBOT_STATE = AVOID_DANGER
-                    ROBERT = 3
+                    SUBSTATE = 3
             
     
     # ramp drive, this drives us up the ramp and aligns with the first fruit
     elif ROBOT_STATE == RAMP_DRIVE:
-        if ROBERT == -3:
+        if SUBSTATE == -3:
             drive_task.update()
             if drive_task.completed:
-                ROBERT = -2
+                SUBSTATE = -2
                 turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) - 97, 2500))
                 is_turning = True
-        if ROBERT == -2:
+        if SUBSTATE == -2:
             if not is_turning:
-                ROBERT = 0
+                SUBSTATE = 0
                 ROBOT_STATE = SEARCHING
-        elif ROBERT == -1:
+        elif SUBSTATE == -1:
             if not is_turning:
                 drive_task = PIDDrive(12, False)
-                ROBERT = -3
+                SUBSTATE = -3
 
         elif LAST_STATE != RAMP_DRIVE:
             drive_task = PIDDrive(306.7, True)
             LAST_STATE = RAMP_DRIVE
         elif drive_task.completed:
-            ROBERT = -1
+            SUBSTATE = -1
             temp = imu.rotation(DEGREES) + 90
             turn_thread = Thread(lambda: execute_threaded_turn(temp, 2500))
             is_turning = True
@@ -962,7 +927,7 @@ def mission():
 
     # searching state, tries to look for fruit and then drives towards it
     elif ROBOT_STATE == SEARCHING:
-        if ROBERT == 0:
+        if SUBSTATE == 0:
             global turn_thread
             desiredInfo = detectFruit(currentFruit)
             if desiredInfo[0] == 0 and desiredInfo[1] == 0:
@@ -996,17 +961,17 @@ def mission():
                     currentFruit = desiredInfo[2]
                     print(desiredInfo[2])
                     turn_thread = Thread(lambda: execute_threaded_turn(desiredInfo[0], 2500))
-                    ROBERT = 1
+                    SUBSTATE = 1
                     is_turning = True
 
-        elif ROBERT == 1:
+        elif SUBSTATE == 1:
             if not is_turning:
                 ROBOT_STATE = APPROACHING
                 LAST_STATE = SEARCHING
-        elif ROBERT == 0.5:
+        elif SUBSTATE == 0.5:
             drive_task.update()
             if drive_task.completed:
-                ROBERT = 0
+                SUBSTATE = 0
 
     # approaching, it sees the fruit and then drives toward it before moving to HARVESTING
     elif ROBOT_STATE == APPROACHING:
@@ -1021,22 +986,22 @@ def mission():
             drive_task.update()
 
     # harvesting, it kind of got replaced by FRUIT_NAVIGATION because it's so complex,
-    # so it changes the ROBERT and moves to FRUIT_NAVIGATION
+    # so it changes the SUBSTATE and moves to FRUIT_NAVIGATION
     elif ROBOT_STATE == HARVESTING:
-        if ROBERT == 1:
-            ROBERT = -2
+        if SUBSTATE == 1:
+            SUBSTATE = -2
             ROBOT_STATE = FRUIT_NAVIGATION
 
     # avoid danger, it just drives away to back away from the tree it's at before moving to FIND_WALL
     elif ROBOT_STATE == AVOID_DANGER:
-        if ROBERT == 3:
+        if SUBSTATE == 3:
             drive_task = PIDDrive(-10.24, False)
-            ROBERT = 4
-        if ROBERT == 4:
+            SUBSTATE = 4
+        if SUBSTATE == 4:
             drive_task.update()
             if drive_task.completed:
                 ROBOT_STATE = FIND_WALL
-                ROBERT = 5
+                SUBSTATE = 5
                 timer.reset()
                 heading = imu.rotation(DEGREES)
             
@@ -1044,7 +1009,7 @@ def mission():
     # find wall, it spins in a circle while the second vision sensor on the side of the robot
     # looks around for the big april tags to drive to the wall
     elif ROBOT_STATE == FIND_WALL:
-        if ROBERT == 5:
+        if SUBSTATE == 5:
             left_motor_1.spin(FORWARD)
             left_motor_2.spin(FORWARD)
             right_motor_1.spin(REVERSE)
@@ -1057,41 +1022,29 @@ def mission():
                 distance = desiredInfo[1]
                 turn_thread = Thread(lambda: execute_threaded_turn(desiredInfo[0], 2500))
                 is_turning = True
-                ROBERT = 6
+                SUBSTATE = 7
 
-        # some code was removed here, don't worry about it
-        if ROBERT == 6:
-            ROBERT = 7
-
-        if ROBERT == 7:
+        if SUBSTATE == 7:
             if not is_turning:
-                ROBERT = 8
+                SUBSTATE = 8
                 drive_task = PIDDrive(distance, False)
-            else:
-                random += 1
-        if ROBERT == 8:
-            info = detectTree()
+        if SUBSTATE == 8:
             drive_task.update()
             if drive_task.completed:
-                ROBERT = 11
+                SUBSTATE = 11
                 ROBOT_STATE = FIND_LINE
-            # unused PANIC mode
-            elif random == 69420:
-                ROBOT_STATE = PANIC
-                desiredAngle = info[0]
-                distance = info[1]
-                ROBERT = 9
+
 
     # currently unused, but it would detect the tree with the vision sensor and turn away from it
     # that way it can find the wall without running into the tree except it doesn't work very well
     elif ROBOT_STATE == PANIC:
-        if ROBERT == 9:
+        if SUBSTATE == 9:
             turn_thread = Thread(lambda: execute_threaded_turn(desiredAngle + imu.rotation(DEGREES), 2500))
-            ROBERT = 10
-        if ROBERT == 10:
+            SUBSTATE = 10
+        if SUBSTATE == 10:
             if not is_turning:
                 ROBOT_STATE = FIND_WALL
-                ROBERT = 5
+                SUBSTATE = 5
                 timer.reset()
                 heading = imu.rotation(DEGREES)
 
@@ -1100,36 +1053,36 @@ def mission():
     # on the line and begin line following. additionally, while it's line following, if it sees the fruit basket
     # it's looking for it transitions states to handle that
     elif ROBOT_STATE == FIND_LINE:
-        if ROBERT == 11:
+        if SUBSTATE == 11:
             drive_task = PIDDrive(40, False)
-            ROBERT = 12
-        if ROBERT == 12:
+            SUBSTATE = 12
+        if SUBSTATE == 12:
             drive_task.update()
             if button.pressing():
-                ROBERT = 13
-        if ROBERT == 13:
+                SUBSTATE = 13
+        if SUBSTATE == 13:
             drive_task = PIDDrive(-4.2, False)
-            ROBERT = 14
-        if ROBERT == 14:
+            SUBSTATE = 14
+        if SUBSTATE == 14:
             drive_task.update()
             if drive_task.completed:
-                ROBERT = 15
-        if ROBERT == 15:
+                SUBSTATE = 15
+        if SUBSTATE == 15:
             currentHeading = imu.rotation(DEGREES)
             turn_thread = Thread(lambda: execute_threaded_turn(currentHeading - 90, 2500))
-            ROBERT = 16
-        if ROBERT == 16:
+            SUBSTATE = 16
+        if SUBSTATE == 16:
             if not is_turning:
-                ROBERT = 17
-        if ROBERT == 17:
+                SUBSTATE = 17
+        if SUBSTATE == 17:
             print(currentFruit)
             if detectTag() == currentFruit:
-                ROBERT = 17.5
+                SUBSTATE = 17.5
                 timer.reset()
                 
             else:
                 if not is_turning:
-                    fieldPosition = line_roberting()
+                    fieldPosition = line_following()
                     if fieldPosition == 1:
                         turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 2500))
                         is_turning = True
@@ -1141,22 +1094,22 @@ def mission():
                         is_turning = True
                     else:
                         pass
-        if ROBERT == 17.5:
+        if SUBSTATE == 17.5:
             if timer.time() >= 1000:
-                ROBERT = 18
+                SUBSTATE = 18
                 ROBOT_STATE = DELIVERING
             else:
-                line_roberting()
+                line_following()
 
     # delivering, it turns the robot into place so it faces the basket
     elif ROBOT_STATE == DELIVERING:
-        if ROBERT == 18:
+        if SUBSTATE == 18:
             for m in [left_motor_1, left_motor_2, right_motor_1, right_motor_2]:
                 m.stop()
             turn_thread = Thread(lambda: execute_threaded_turn(imu.rotation(DEGREES) + 90, 1500))
             is_turning = True
-            ROBERT = 19
-        if ROBERT == 19:
+            SUBSTATE = 19
+        if SUBSTATE == 19:
             if not is_turning:
                 ROBOT_STATE = DEPOSIT_RESET
                 timer.reset()
@@ -1164,7 +1117,7 @@ def mission():
     # deposit_reset, it handles dumping the hopper and then going back all the way to the beginning
     elif ROBOT_STATE == DEPOSIT_RESET:
     
-        if ROBERT != 20:
+        if SUBSTATE != 20:
             if not button.pressing():
                 left_motor_1.spin(FORWARD)
                 left_motor_2.spin(FORWARD)
@@ -1179,14 +1132,14 @@ def mission():
                 claw.spin_to_position(0, DEGREES)
                 flap.spin_to_position(235, DEGREES)
 
-                ROBERT = 20
+                SUBSTATE = 20
                 timer.reset()
 
-        elif ROBERT == 20:
+        elif SUBSTATE == 20:
             if timer.time() >= 3000:
                 flap.spin_to_position(0, DEGREES)
 
-                ROBERT = 0
+                SUBSTATE = 0
                 fruit_count = 0
                 intersectionCount = 0
                 currentFruit = 0
@@ -1194,10 +1147,10 @@ def mission():
     
     # this state should never be reached, but if it does then we know something went wrong
     else:
-        print("67")
+        print("This should never been seen")
 
 # while true, where we call mission and bring debug info to the controller screen
-# we see current state, the ROBERT count, and the current heading of the robot
+# we see current state, the SUBSTATE count, and the current heading of the robot
 # it prints every 500ms in order to not lag the brain
 while True:
     mission()
@@ -1208,7 +1161,7 @@ while True:
         brain.screen.set_cursor(1,1)
         controller_1.screen.print("ROBOT_STATE: {:.2f}".format(ROBOT_STATE))
         controller_1.screen.next_row()
-        controller_1.screen.print("ROBERT: {:.2f}".format(ROBERT))
+        controller_1.screen.print("SUBSTATE: {:.2f}".format(SUBSTATE))
         controller_1.screen.next_row()
         controller_1.screen.print("HEADING: {:.2f}".format(imu.rotation(DEGREES)))
     
