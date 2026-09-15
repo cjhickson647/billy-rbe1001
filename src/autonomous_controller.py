@@ -242,8 +242,8 @@ FIND_LINE = 9
 LINE_FOLLOWING = 10
 DEPOSIT_RESET = 11
 FRUIT_NAVIGATION = 12
-AUTO_RESET = 67
-DEBUG = 420
+AUTO_RESET = 20
+DEBUG = -500
 
 ROBOT_STATE = IDLE
 LAST_STATE = -1
@@ -404,7 +404,6 @@ class PIDDrive:
 # and the motor encoder position and IMU, with the option
 # to exit the PIDTurn early if it takes too long
 class PIDTurn:
-    global cringe
     def __init__(self, degrees, max_time_msec):
         #2.1, 17
         self.kP, self.kI, self.kD = 2.1, 0, 17
@@ -432,20 +431,16 @@ class PIDTurn:
         self.completed = False
 
     def update(self):
-        global cringe
-        # cringe = "stupid"
         # Check if already done or timed out
         global left_motor_1, left_motor_2, right_motor_1, right_motor_2
         current_time = brain.timer.time(MSEC)
-        # cringe = "stupid"
-        
+
         if self.completed:
             return
 
         # Hard Timeout check
         if (current_time - self.start_time) > self.max_time:
             self.stop_and_finish()
-            # cringe = "fat"
             return
 
         # PID Calculation
@@ -484,12 +479,12 @@ class PIDTurn:
         # elif (current_time - self.stall_start_time) > 250:
         #     self.stop_and_finish()
         #     return
+
         if (abs(self.error - self.prevError) > 0.5): 
             self.stall_start_time = current_time  
         # stuck in oscillation
         elif (current_time - self.stall_start_time > 250):
             self.stop_and_finish()
-            # cringe = "chud"
             return
         
          # Update Screen and Variables
